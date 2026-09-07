@@ -4,7 +4,7 @@ Home Assistant *package*, amely a magyar **MVM Next D (dinamikus) árszabás** a
 negyedórás árát számolja ki, natív `rest` és `template` integrációval — egyedi
 komponens vagy HACS nélkül.
 
-Fájl: [`d_tarifa.yaml`](d_tarifa.yaml)
+Fájl: [`d_tarifa.yaml`](packages/d_tarifa.yaml)
 
 ---
 
