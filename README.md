@@ -84,8 +84,6 @@ homeassistant:
   packages: !include_dir_named packages
 ```
 
-> Ebben a repóban ez **már be van állítva** (`configuration.yaml`, 19. sor), tehát
-> ezt a lépést átugorhatod.
 
 ### 3. lépés — konfiguráció ellenőrzése és újraindítás
 
