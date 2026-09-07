@@ -6,6 +6,9 @@ komponens vagy HACS nélkül.
 
 Fájl: [`d_tarifa.yaml`](packages/d_tarifa.yaml)
 
+
+![screenshot](./screenshot.jpg)
+
 ---
 
 ## Mit csinál?
