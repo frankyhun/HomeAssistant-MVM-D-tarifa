@@ -324,9 +324,12 @@ scriptet, amikor az ár-szenzor kiesés után visszatér (`unavailable` → ért
 stabilitás után), plusz **6 óránként** hálóként. A script maga dönti el, mit kell
 pótolni, ezért a fölösleges futás nem kerül semmibe.
 
-Ilyenkor a script a Home Assistant saját konténerében fut, és websocket kliensnek az
-`aiohttp`-t használja a `websockets` helyett — az mindig ott van, **nem kell semmit
-telepíteni**.
+A script a Home Assistant saját konténerében fut, és websocket kliensnek az
+`aiohttp`-t használja — az a HA-ban mindig ott van, **nem kell semmit telepíteni**.
+Ez az egyetlen támogatott futtatási mód: a HA-t így mindig a loopbackon
+(`http://127.0.0.1:8123`) éri el, nem kell hozzá se hosztnév, se LAN IP. Ha a HA
+nem a 8123-as porton figyel, a `shell_command` sorát írd át a
+`d_tarifa.yaml`-ban.
 
 Három lépés kell hozzá, különben ez a rész nem csinál semmit:
 

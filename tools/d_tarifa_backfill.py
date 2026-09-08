@@ -29,28 +29,24 @@ egyszeruen felulirodik. Alapbol viszont csak azokat az orakat toltjuk fel,
 amelyekre meg egyaltalan nincs statisztika - a HA sajat, allapotokbol szamolt
 (idovel sulyozott) atlagat nem irjuk felul. Ezt a `--overwrite` kapcsolja ki.
 
-FUTTATAS KEZZEL (asztali gepen)
-===============================
-    pip install websockets
+FUTTATAS
+========
+A script a Home Assistant sajat kontenerebol fut, a `packages/d_tarifa.yaml`
+`shell_command.d_tarifa_backfill` bejegyzesen keresztul. Az ottani
+automatizalas inditja, amikor az ar-szenzor `unavailable`-bol visszater, plusz
+6 orankent halokent; kezzel a Fejlesztoi eszkozok -> Muveletek alatt hivhato.
 
-    set HA_URL=http://homeassistant.local:8123
-    set HA_TOKEN=<hosszu elettartamu hozzaferesi token>
+Ez az EGYETLEN tamogatott futtatasi mod, es ebbol kovetkezik nehany dolog:
 
-A `homeassistant.local` csak PELDA - a HA alapertelmezett hosztneve. Ha a te
-peldanyod mas cimen vagy porton figyel (pl. `http://192.168.1.50:8123`, vagy
-HTTPS mogott), akkor ird at: `HA_URL` kornyezeti valtozo vagy `--ha-url`.
-Onalairt tanusitvany eseten kell melle a `--insecure` is.
+  * A HA sajat cime mindig a loopback: `http://127.0.0.1:8123` - ezt a
+    shell_command explicit at is adja a `--ha-url` kapcsoloval. Nincs szukseg
+    `HA_URL` kornyezeti valtozora, sem kulso hosztnevre vagy LAN IP-re.
+  * Websocket kliensnek az `aiohttp` megy, ami a HA-ban mindig ott van - nem
+    kell semmit telepiteni.
+  * A loopbacken nincs TLS, ezert onalairt tanusitvanyt kezelo kapcsolo sincs.
 
-    python tools/d_tarifa_backfill.py --dry-run --verbose
-    python tools/d_tarifa_backfill.py
-
-FUTTATAS A HOME ASSISTANTBOL (automatikusan)
-============================================
-A `packages/d_tarifa.yaml` tartalmaz egy `shell_command.d_tarifa_backfill`
-bejegyzest es egy automatizalast, ami akkor inditja, amikor az ar-szenzor
-`unavailable`-bol visszater, plusz 6 orankent halokent. Ilyenkor a script a HA
-sajat kontenereben fut, es a `websockets` csomag helyett az `aiohttp`-t
-hasznalja, ami a HA-ban mindig ott van - nem kell semmit telepiteni.
+Ha nem az alapertelmezett 8123-as porton figyel a HA, a `shell_command` sorat
+kell atirni a `packages/d_tarifa.yaml`-ban.
 
 A token NEM mehet a parancssorba: a `shell_command` nem nulla visszateresi
 ertek eseten a teljes parancsot beleirja a naploba. Ezert `--token-file`:
@@ -74,7 +70,6 @@ import argparse
 import asyncio
 import json
 import os
-import ssl
 import sys
 import time
 import urllib.error
@@ -91,11 +86,10 @@ NETTO_ID = "sensor.d_tarifa_netto_energiadij"
 BRUTTO_ID = "sensor.d_tarifa_brutto_energiadij"
 UNIT = "Ft/kWh"
 
-# Csak alapertelmezes: a HA dokumentalt alapertelmezett hosztneve. Sok
-# telepitesnel mas a cim - allitsd at a HA_URL kornyezeti valtozoval vagy a
-# --ha-url kapcsoloval. (A HA sajat kontenerebol futtatva a package
-# shell_command-ja ugyis http://127.0.0.1:8123-at ad at.)
-DEFAULT_HA_URL = "http://homeassistant.local:8123"
+# A script a HA sajat kontenereben fut, tehat a HA mindig a loopbacken van. A
+# package shell_command-ja ugyanezt adja at explicit `--ha-url`-lel; ez itt csak
+# azert all, hogy kapcsolo nelkul is mukodjon (pl. a kontener shelljebol hivva).
+DEFAULT_HA_URL = "http://127.0.0.1:8123"
 DEFAULT_TOKEN_FILE = "/config/.d_tarifa_token"
 
 HELPERS = {
@@ -274,16 +268,23 @@ def fetch_params(
 
 
 def read_token(args: argparse.Namespace) -> str:
-    """Token: --token > HA_TOKEN > --token-file > /config/.d_tarifa_token."""
+    """Token: --token > --token-file > HA_TOKEN > /config/.d_tarifa_token.
+
+    Az explicit kapcsolok elozik meg a kornyezeti valtozot, nem forditva: a
+    package shell_command-ja `--token-file`-t ad at, es azt nem irhatja felul egy
+    ambiens `HA_TOKEN` - kulonben egy oda nem illo (pl. mas integraciotol
+    maradt) env valtozotol csendben mas tokennel probalnank belepni.
+    """
     if args.token:
         return args.token.strip()
-    env = os.environ.get("HA_TOKEN")
-    if env:
-        return env.strip()
 
-    path = args.token_file or (
-        DEFAULT_TOKEN_FILE if os.path.isfile(DEFAULT_TOKEN_FILE) else None
-    )
+    path = args.token_file
+    if path is None:
+        env = os.environ.get("HA_TOKEN")
+        if env:
+            return env.strip()
+        path = DEFAULT_TOKEN_FILE if os.path.isfile(DEFAULT_TOKEN_FILE) else None
+
     if path:
         try:
             with open(path, encoding="utf-8") as handle:
@@ -295,8 +296,8 @@ def read_token(args: argparse.Namespace) -> str:
         return token
 
     raise Fail(
-        "Nincs token. Add meg a --token kapcsoloval, a HA_TOKEN kornyezeti "
-        f"valtozoban, vagy tedd egy fajlba (--token-file, alapbol {DEFAULT_TOKEN_FILE})."
+        f"Nincs token. Tedd egy fajlba ({DEFAULT_TOKEN_FILE}), vagy add meg a "
+        "--token-file / --token kapcsoloval, illetve a HA_TOKEN kornyezeti valtozoban."
     )
 
 
@@ -347,82 +348,46 @@ def ws_url(ha_url: str) -> str:
 class HaWs:
     """Minimalis HA websocket kliens: auth + parancsok.
 
-    Ket hattere van, mert ketfele helyen fut:
-      * `aiohttp`    - a HA sajat kontenereben (shell_command), ott biztosan van
-      * `websockets` - asztali gepen, kezi futtataskor
+    Csak `aiohttp`-t hasznal: a script a HA sajat kontenereben fut, ahol az
+    `aiohttp` mindig jelen van - a HA maga is azon keresztul halozik.
     """
 
-    def __init__(self, url: str, token: str, insecure: bool = False) -> None:
+    def __init__(self, url: str, token: str) -> None:
         self._url = url
         self._token = token
-        self._insecure = insecure
         self._id = 0
-        self._backend = ""
         self._conn = None
         self._session = None
 
-    def _ssl_ctx(self):
-        if not (self._insecure and self._url.startswith("wss://")):
-            return None
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return ctx
-
     async def __aenter__(self) -> "HaWs":
-        errors = []
         try:
             import aiohttp
+        except ImportError as err:  # a HA kontenereben ez nem fordulhat elo
+            raise Fail(
+                "Hianyzik az `aiohttp`. Ez a script a Home Assistant sajat "
+                "kontenerebol futtatva mukodik, ahol az `aiohttp` mindig ott van.\n"
+                f"  {err}"
+            ) from err
 
-            self._backend = "aiohttp"
-            # Sajat feloldo: Windowson az aiohttp alapertelmezett aiodns
-            # feloldoja SelectorEventLoop-ot kovetel, es a Python 3.8+ ott
-            # ProactorEventLoop-ot hasznal - a ClientSession letrehozasa mar
+        try:
+            # Sajat feloldo: az aiohttp alapertelmezett aiodns feloldoja
+            # SelectorEventLoop-ot kovetel, Windowson viszont a Python 3.8+
+            # ProactorEventLoop-ot hasznal - ott mar a ClientSession letrehozasa
             # RuntimeError-rel elszallna. A HA kontenereben (Linux) ennek nincs
-            # jelentosege, itt viszont ez teszi kezzel futtathatova.
+            # jelentosege, viszont igy a script hibakeresesre mas gepen is
+            # elindul, ha van aiohttp.
             connector = aiohttp.TCPConnector(resolver=aiohttp.ThreadedResolver())
             self._session = aiohttp.ClientSession(connector=connector)
-            ctx = self._ssl_ctx()
-            kwargs = {"max_msg_size": 32 * 1024 * 1024}
-            if ctx is not None:
-                kwargs["ssl"] = ctx
-            self._conn = await self._session.ws_connect(self._url, **kwargs)
-        except Exception as err:  # noqa: BLE001 - barmi jon, van masik hatterunk
-            errors.append(f"aiohttp: {err}")
-            self._backend = ""
+            self._conn = await self._session.ws_connect(
+                self._url, max_msg_size=32 * 1024 * 1024
+            )
+        except Exception as err:  # noqa: BLE001 - halozati hiba, timeout, elutasitas
             if self._session is not None:
                 await self._session.close()
                 self._session = None
-            self._conn = None
-
-        if self._conn is None:
-            connect = None
-            try:
-                from websockets.asyncio.client import connect  # websockets >= 13
-            except ImportError:
-                try:
-                    from websockets.client import connect  # type: ignore[no-redef]
-                except ImportError as err:
-                    errors.append(f"websockets: {err}")
-            if connect is not None:
-                try:
-                    self._backend = "websockets"
-                    kwargs = {"max_size": 32 * 1024 * 1024}
-                    ctx = self._ssl_ctx()
-                    if ctx is not None:
-                        kwargs["ssl"] = ctx
-                    self._conn = await connect(self._url, **kwargs)
-                except Exception as err:  # noqa: BLE001
-                    errors.append(f"websockets: {err}")
-                    self._backend = ""
-                    self._conn = None
-
-        if self._conn is None:
             raise Fail(
-                f"Nem sikerult websocket kapcsolatot nyitni: {self._url}\n  "
-                + "\n  ".join(errors)
-                + "\n  (asztali gepen, ha egyik konyvtar sincs meg: pip install websockets)"
-            )
+                f"Nem sikerult websocket kapcsolatot nyitni: {self._url}\n  {err}"
+            ) from err
 
         hello = json.loads(await self._recv())
         if hello.get("type") != "auth_required":
@@ -443,20 +408,15 @@ class HaWs:
             await self._session.close()
 
     async def _send(self, text: str) -> None:
-        if self._backend == "aiohttp":
-            await self._conn.send_str(text)
-        else:
-            await self._conn.send(text)
+        await self._conn.send_str(text)
 
     async def _recv(self) -> str:
-        if self._backend == "aiohttp":
-            msg = await self._conn.receive()
-            import aiohttp
+        import aiohttp
 
-            if msg.type is not aiohttp.WSMsgType.TEXT:
-                raise Fail(f"A websocket kapcsolat megszakadt: {msg.type!r}")
-            return msg.data
-        return await self._conn.recv()
+        msg = await self._conn.receive()
+        if msg.type is not aiohttp.WSMsgType.TEXT:
+            raise Fail(f"A websocket kapcsolat megszakadt: {msg.type!r}")
+        return msg.data
 
     async def cmd(self, payload: dict) -> dict:
         self._id += 1
@@ -568,7 +528,7 @@ async def run(args: argparse.Namespace) -> int:
     written = 0
 
     deadline.check("websocket kapcsolodas")
-    async with HaWs(ws_url(ha_url), token, insecure=args.insecure) as ws:
+    async with HaWs(ws_url(ha_url), token) as ws:
         for stat_id, factor in ((NETTO_ID, 1.0), (BRUTTO_ID, afa)):
             have = set() if args.overwrite else await existing_hours(ws, stat_id, lo, hi)
             rows = [
@@ -628,9 +588,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--ha-url",
-        default=os.environ.get("HA_URL", DEFAULT_HA_URL),
-        help=f"a Home Assistant cime (vagy HA_URL); alapbol {DEFAULT_HA_URL} - "
-        "ha a te peldanyod mashol figyel, ezt at kell allitani",
+        default=DEFAULT_HA_URL,
+        help=f"a Home Assistant cime a kontenerbol nezve (alapbol {DEFAULT_HA_URL}); "
+        "nem alapertelmezett port eseten a package shell_command-jaban kell atirni",
     )
     parser.add_argument(
         "--token", default=None, help="HA hosszu elettartamu token (vagy HA_TOKEN)"
@@ -658,9 +618,6 @@ def main() -> int:
         type=float,
         default=45.0,
         help="idokeret masodpercben (0 = nincs); a shell_command 60 s utan levag",
-    )
-    parser.add_argument(
-        "--insecure", action="store_true", help="onalairt HTTPS tanusitvany elfogadasa"
     )
     parser.add_argument(
         "--fx", type=float, default=None, help="fix EUR/HUF arfolyam a napi EKB helyett"
