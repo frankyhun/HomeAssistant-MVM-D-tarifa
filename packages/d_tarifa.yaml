@@ -1,8 +1,9 @@
 ################################################################################
-# MVM D (dinamikus) árszabás - aktuális ár Home Assistantban natív REST & template alapon.
+# MVM D (dinamikus) arszabas - aktuális ár 
+# Home Assistantban natív REST & template alapon.
 #
-# Adatforrás: api.energy-charts.info (Fraunhofer ISE), HU zona day-ahead ár,
-# negyedórás bontás, EUR/MWh, kulcs és regisztrácio nélkül.
+# Adatforras: api.energy-charts.info (Fraunhofer ISE), HU zona day-ahead ár,
+# negyedórás bontás, EUR/MWh, kulcs és regisztrácio nelkul.
 # Az adat eredeti forrasa: Bundesnetzagentur | SMARD.de, CC BY 4.0
 # (https://creativecommons.org/licenses/by/4.0/), változtatás nélkül.
 # Ugyanezt a paros forrast (energy-charts + EKB arfolyam) hasznalja a
@@ -16,7 +17,7 @@
 # Telepites:
 #   configuration.yaml:  homeassistant:
 #                          packages: !include_dir_named packages
-#   fájl helye:          /config/packages/d_tarifa.yaml
+#   fajl helye:          /config/packages/d_tarifa.yaml
 ################################################################################
 
 # FIGYELEM - elso inditas utan egyszer be kell allitani a lenti ot helper
@@ -87,14 +88,39 @@ input_number:
 rest:
   # HUPX / HU zona day-ahead arak. A valasz:
   #   {"unix_seconds":[...], "price":[...], "unit":"EUR / MWh"}
-  # A masnapi arak kb. 13:00 utan jelennek meg, ekkor a tomb 192 elemre no.
-  - resource: "https://api.energy-charts.info/price?bzn=HU"
+  # A masnapi arak kb. 13:00 utan jelennek meg, ekkor a tomb egy nappal no.
+  #
+  # MIERT DATUMTARTOMANY, ES NEM a rovid `?bzn=HU` alak?
+  # A datum nelkuli alak mindig a MAI napot keri, es 404 "no content available"
+  # hibaval elszall, ha a HU zonara meg egyetlen negyedora sincs publikalva.
+  # 2026-09-08-an pontosan ez tortent: a DE-LU es AT zonanak megvolt a teljes
+  # napja, a HU-nak (es a SK-nak) semmi. Ilyenkor a REST sensor unavailable
+  # lesz, es minden pollnal harom hibat ir a naploba (404, "REST result could
+  # not be parsed as JSON", "'value_json' is undefined").
+  #
+  # Explicit tegnap..holnap tartomannyal a valasz akkor is 200, ha a mai nap
+  # hianyzik - csak rovidebb tomb jon. Az arat ettol nem talaljuk ki: lent az
+  # `eur_mwh` frissesseg-ellenorzese (1800 s) gondoskodik rola, hogy a tegnapi
+  # 23:45-os ar ne szivarogjon at mai arkent.
+  #
+  # A `resource_template` minden frissites elott ujra renderelodik, tehat a
+  # datumok maguktol tovabblepnek ejfelkor - nincs szukseg ujrainditasra.
+  - resource_template: >-
+      https://api.energy-charts.info/price?bzn=HU&start={{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}&end={{ (now() + timedelta(days=1)).strftime('%Y-%m-%d') }}
     scan_interval: 900
     timeout: 30
     sensor:
       - name: "HUPX arak"
         unique_id: hupx_arak
-        value_template: "{{ value_json.price | count }}"
+        # A `value_json is defined` ellenorzes nelkul minden nem-JSON valasz
+        # (404, 429 "Too Many Requests", karbantartasi HTML) template hibat dob
+        # minden egyes pollnal. A datumos vegpont nincs cache-elve, ezert a 429
+        # valosagos eshetoseg - 15 perces scan_interval mellett viszont bosegesen
+        # a limit alatt maradunk.
+        value_template: >-
+          {{ value_json.price | count
+          if value_json is defined and value_json.price is defined
+          else 0 }}
         unit_of_measurement: "db"
         icon: mdi:chart-line
         json_attributes:
@@ -103,7 +129,9 @@ rest:
           - unit
           - license_info
         # Ellenorzes: a "unit" attributumnak "EUR / MWh"-nak kell lennie, a
-        # "db" allapotnak pedig 96 (csak mai nap) vagy 192 (masnappal egyutt).
+        # "db" allapot pedig 192 (tegnap + ma) vagy 288 (a masnapi arak
+        # megjelenese utan). 96 = csak tegnap van meg, azaz a mai HU adat
+        # hianyzik az adatforrasbol; 0 = a valasz nem is volt JSON.
 
   # EUR/HUF: EKB (ECB) referencia-arfolyam, ugyanaz, amit a holadelej.hu hasznal.
   # Az MVM viszont az MNB napi hivatalos kozeparfolyamaval szamol - az elteres
@@ -197,6 +225,14 @@ template:
           beallitva: >-
             {{ fx | float(0) > 250 and afa | float(0) > 1
                and afd | float(0) > 0 and efd | float(0) > 0 }}
+          # Az "olcso" kuszob. A `| float(70.1)` NEM ved a be nem allitott
+          # helper ellen: az `initial:` nelkuli input_number a letrehozasakor a
+          # `min` erteken (0) all, az pedig ervenyes szam, tehat a float()
+          # tartalek ertek soha nem lep eletbe. Igy a binary_sensor csendben
+          # "0 Ft/kWh alatt olcso"-t szamolna, azaz MINDIG `off` lenne - meg 43
+          # Ft/kWh-nal is. Ezert a nullat "nincs beallitva"-kent kezeljuk, es a
+          # szenzor inkabb legyen unavailable, mint hamisan `off`.
+          kuszob: "{{ states('input_number.d_a1_referencia') | float(0) }}"
     sensor:
       - name: "D tarifa nettó energiadíj"
         unique_id: d_tarifa_netto_energiadij
@@ -251,7 +287,119 @@ template:
       - name: "D tarifa olcso"
         unique_id: d_tarifa_olcso
         icon: mdi:piggy-bank
-        availability: "{{ netto != 'unavailable' and beallitva }}"
+        availability: >-
+          {{ netto != 'unavailable' and beallitva and kuszob | float(0) > 0 }}
         state: >-
           {{ ((netto | float(0)) * afa | float(1.27)) | round(2)
-            < states('input_number.d_a1_referencia') | float(70.1) }}
+            < kuszob | float(0) }}
+        # Diagnosztika: a tobb-more info ablakban azonnal latszik, MIVEL
+        # hasonlitott ossze a szenzor. Ha a `kuszob` nem az, amit a helper
+        # mezoben latsz, akkor vagy nem frissult ujra a szenzor, vagy egy masik
+        # (pl. a feluleten kezzel letrehozott, duplikalt) helpert allitottal at.
+        attributes:
+          kuszob: "{{ kuszob | float(0) }}"
+          brutto: "{{ ((netto | float(0)) * afa | float(1.27)) | round(2) }}"
+          szamitva: "{{ now().isoformat() }}"
+
+################################################################################
+# Automatikus visszamenoleges potlas (opcionalis)
+################################################################################
+# Ha az adatforrasbol hianyzott egy idoszak, majd kesobb publikaljak, a szenzorok
+# maguktol helyreallnak - de a kieses lyukkent marad a grafikonon. Ez a resz
+# inditja el ilyenkor a `tools/d_tarifa_backfill.py` scriptet, ami az utolag
+# publikalt arakbol kiszamolja a hianyzo orakat, es beirja oket a HA hosszu tavu
+# statisztikaiba.
+#
+# Csak a `statistics` tabla toltheto vissza (oras atlag/min/max) - ezt hasznalja
+# a `statistics-graph` kartya. A nyers `states` tortenetet a HA semmilyen
+# tamogatott modon nem engedi visszaminositeni, az "Nem erheto el" marad.
+#
+# BEUZEMELES (harom lepes, kulonben ez a resz nem csinal semmit):
+#   1. Masold a `tools/d_tarifa_backfill.py` fajlt a `/config/tools/` mappaba.
+#   2. Hozz letre egy hosszu elettartamu tokent (profil -> Biztonsag), es tedd
+#      egyetlen sorkent a `/config/.d_tarifa_token` fajlba. ADMIN jog kell: az
+#      `import_statistics` websocket parancs `require_admin`.
+#      A token szandekosan fajlbol jon, NEM a parancssorbol: a `shell_command`
+#      nem nulla visszateresi ertek eseten a teljes parancsot beleirja a naploba.
+#   3. Kapcsold be az `input_boolean.d_tarifa_auto_backfill` helpert.
+input_boolean:
+  d_tarifa_auto_backfill:
+    name: "D tarifa - automatikus statisztika-potlas"
+    icon: mdi:backup-restore
+
+shell_command:
+  # A HA sajat kontenereben fut, ezert a script az `aiohttp`-t hasznalja
+  # websocket kliensnek - az mindig elerheto, nem kell semmit telepiteni.
+  # A --budget 45 azert kell, mert a shell_command 60 masodperc utan levagja a
+  # folyamatot (COMMAND_TIMEOUT) es HomeAssistantError-t dob; inkabb alljunk le
+  # elotte ertelmes uzenettel.
+  d_tarifa_backfill: >-
+    python3 /config/tools/d_tarifa_backfill.py
+    --ha-url http://127.0.0.1:8123
+    --token-file /config/.d_tarifa_token
+    --quiet --budget 45
+
+automation:
+  - id: d_tarifa_statisztika_potlas
+    alias: "D tarifa - hianyzo ar-statisztikak potlasa"
+    description: >-
+      Lefuttatja a backfill scriptet, amikor az ar-szenzor kieses utan visszater,
+      illetve 6 orankent halokent. A script maga donti el, mit kell potolni:
+      lekerdezi a meglevo oras statisztikakat, es csak a hianyzo orakat irja be.
+    mode: single
+    max_exceeded: silent
+    triggers:
+      # A kieses vege. A `for` azert kell, hogy egy villano helyreallas ne
+      # inditsa el feleslegesen; a `not_to` pedig azert, hogy az
+      # unavailable -> unknown atmenet ne szamitson helyreallasnak.
+      - trigger: state
+        entity_id: sensor.d_tarifa_netto_energiadij
+        from: "unavailable"
+        not_to: "unknown"
+        for: "00:02:00"
+      # Halo: HA-ujrainditas, elmulasztott trigger, kesve erkezo adat eseten.
+      # A script idempotens, ezert a felesleges futas nem kerul semmibe.
+      - trigger: time_pattern
+        hours: "/6"
+        minutes: 20
+    conditions:
+      - condition: state
+        entity_id: input_boolean.d_tarifa_auto_backfill
+        state: "on"
+      # Ha meg egyetlen ar sincs a tombben, nincs mit potolni.
+      - condition: template
+        value_template: "{{ states('sensor.hupx_arak') | int(0) > 0 }}"
+    actions:
+      - action: shell_command.d_tarifa_backfill
+        response_variable: eredmeny
+      - choose:
+          # Tenylegesen potoltunk valamit - ez erdemel naplobejegyzest.
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ eredmeny.returncode == 0
+                     and 'KESZ: nincs' not in eredmeny.stdout }}
+            sequence:
+              - action: logbook.log
+                data:
+                  name: "D tarifa"
+                  entity_id: sensor.d_tarifa_brutto_energiadij
+                  # `splitlines()` es nem `split('\n')`: a YAML kettos idezojelben
+                  # a \n valodi sortoresre alakulna, egyszeresben viszont nem -
+                  # ez az alak mindkettotol fuggetlenul helyes.
+                  message: >-
+                    {{ (eredmeny.stdout.splitlines() or ['(nincs kimenet)']) | last }}
+          # A 2-es visszateresi ertek nem hiba: az adatforras meg nem potolta az
+          # adatot. Ilyenkor csendben varunk a kovetkezo futasig.
+          - conditions:
+              - condition: template
+                value_template: "{{ eredmeny.returncode not in [0, 2] }}"
+            sequence:
+              - action: system_log.write
+                data:
+                  level: warning
+                  logger: d_tarifa_backfill
+                  message: >-
+                    A visszamenoleges statisztika-potlas nem sikerult
+                    (returncode {{ eredmeny.returncode }}):
+                    {{ eredmeny.stderr or eredmeny.stdout }}

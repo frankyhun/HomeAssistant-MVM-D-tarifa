@@ -84,6 +84,8 @@ homeassistant:
   packages: !include_dir_named packages
 ```
 
+> Ebben a repóban ez **már be van állítva** (`configuration.yaml`, 19. sor), tehát
+> ezt a lépést átugorhatod.
 
 ### 3. lépés — konfiguráció ellenőrzése és újraindítás
 
@@ -132,13 +134,13 @@ A pontos díjtételek a saját MVM-számládon szerepelnek, érdemes onnan átve
 | `sensor.d_tarifa_netto_energiadij` | Az aktuális negyedóra **nettó** ára Ft/kWh. Attribútumok: `hupx_eur_mwh`, `arfolyam`, `negyedora_index`, `szamitva` |
 | `sensor.d_tarifa_brutto_energiadij` | Ugyanez **bruttó** (× áfa szorzó) |
 | `sensor.d_tarifa_mai_atlag_brutto` | A mai nap átlagos bruttó ára. Attribútumok: `minimum`, `maximum`, `legolcsobb_idopont`, `legdragabb_idopont` |
-| `binary_sensor.d_tarifa_olcso` | `on`, ha az aktuális bruttó ár az A1 referenciaár alatt van |
+| `binary_sensor.d_tarifa_olcso` | `on`, ha az aktuális bruttó ár az A1 referenciaár alatt van. Amíg az `input_number.d_a1_referencia` `0` (nincs beállítva), **nem érhető el** — nem `off` |
 
 ### Nyers adat (REST)
 
 | Entitás | Leírás |
 |---|---|
-| `sensor.hupx_arak` | A negyedórás árak darabszáma: `96` (csak a mai nap) vagy `192` (a másnapiakkal együtt). Attribútumok: `unix_seconds`, `price`, `unit`, `license_info` |
+| `sensor.hupx_arak` | A negyedórás árak darabszáma: `192` (tegnap + ma) vagy `288` (a másnapiakkal együtt). `96` = csak tegnap van meg, azaz **hiányzik a mai adat a forrásból**; `0` = a válasz nem is volt JSON. Attribútumok: `unix_seconds`, `price`, `unit`, `license_info` |
 | `sensor.eur_huf_arfolyam` | Aktuális EKB EUR/HUF árfolyam |
 
 ### Helperek
@@ -147,13 +149,24 @@ A pontos díjtételek a saját MVM-számládon szerepelnek, érdemes onnan átve
 `input_number.d_afa_kulcs`, `input_number.d_arfolyam_kezi`,
 `input_number.d_a1_referencia`
 
+`input_boolean.d_tarifa_auto_backfill` — az automatikus statisztika-pótlás
+kapcsolója, lásd [A kiesés utólagos pótlása](#a-kiesés-utólagos-pótlása).
+Alapból **ki** van kapcsolva.
+
+### Szolgáltatás és automatizálás
+
+| Név | Leírás |
+|---|---|
+| `shell_command.d_tarifa_backfill` | Elindítja a pótló scriptet. Kézzel is hívható a **Fejlesztői eszközök → Műveletek** alatt. |
+| `automation.d_tarifa_hianyzo_ar_statisztikak_potlasa` | Kiesés után, illetve 6 óránként lefuttatja a fentit |
+
 ---
 
 ## A működés ellenőrzése
 
 **Fejlesztői eszközök → Állapotok**, majd:
 
-1. `sensor.hupx_arak` állapota `96` vagy `192`.
+1. `sensor.hupx_arak` állapota `192` vagy `288`.
 2. Ugyanennek az `unit` attribútuma `EUR / MWh`.
 3. `sensor.eur_huf_arfolyam` egy nagyjából 350–420 közötti szám.
 4. `sensor.d_tarifa_brutto_energiadij` értelmes Ft/kWh értéket mutat.
@@ -178,6 +191,23 @@ Sorrendben ezeket nézd meg:
 
 3. **Publikálatlan negyedóra.** Ha az API `null` árat ad az aktuális negyedórára, a
    szenzor elérhetetlen lesz — nem pedig 0 Ft/kWh.
+
+4. **Az adatforrásból hiányzik az egész mai nap.** Ez nem elméleti: 2026-09-08-án a
+   HU (és az SK) zónára az energy-charts egyetlen negyedórát sem adott, miközben a
+   DE-LU és az AT zónának megvolt a teljes napja. Felismerése: `sensor.hupx_arak`
+   állapota `96`, és az `unix_seconds` utolsó eleme tegnap 23:45.
+
+   Ilyenkor nincs mit tenni a HA oldalán — az árak akkor jönnek vissza, amikor a
+   forrás pótolja az adatot; a következő 15 perces lekérdezés magától helyreállítja
+   a szenzorokat. A kiesés alatt keletkezett grafikon-lyuk utólag betölthető, lásd
+   [A kiesés utólagos pótlása](#a-kiesés-utólagos-pótlása).
+
+### A `binary_sensor.d_tarifa_olcso` mindig `Ki`, pedig olcsó az ár
+
+Az `input_number.d_a1_referencia` nincs beállítva, ezért `0`-n áll, és a szenzor a
+`0 Ft/kWh`-hoz hasonlít. **Fejlesztői eszközök → Állapotok**-ban ellenőrizd az
+értékét, és állítsd be (ajánlott: `70.1`). A csomag mostantól ilyenkor `Nem érhető el`
+állapotot mutat a félrevezető `Ki` helyett.
 
 ### Csak a `sensor.d_tarifa_mai_atlag_brutto` nem érhető el
 
@@ -212,8 +242,166 @@ A `binary_sensor.d_tarifa_olcso` az `input_number.d_a1_referencia` értékéhez
 hasonlítja az aktuális bruttó árat. A küszöb menet közben, újraindítás nélkül
 állítható — a szenzor azonnal újraszámol.
 
+A helper `initial:` nélkül a létrehozásakor a `min` értéken, azaz **0-n** áll. Ezért a
+`0` küszöböt a csomag szándékosan „nincs beállítva”-ként kezeli, és a binary_sensor
+ilyenkor `Nem érhető el` — különben csendben „0 Ft/kWh alatt olcsó”-t számolna, tehát
+akkor is `Ki` lenne, amikor az ár 43 Ft/kWh. Írd be a küszöböt (pl. `70.1`), és a
+szenzor azonnal életre kel.
+
 ### Frissítési gyakoriság
 
 `scan_interval: 900` (energy-charts) és `scan_interval: 3600` (árfolyam). A számított
 szenzorok emellett minden negyedóra fordulóján, HA-indításkor, és bármelyik helper
 módosításakor újraszámolnak.
+
+---
+
+## Miért dátumtartományt kérünk az API-tól?
+
+A rövid `?bzn=HU` alak mindig a **mai** napot kéri, és `404 no content available`
+hibával elszáll, ha a HU zónára még egyetlen negyedóra sincs publikálva. Ilyenkor a
+`sensor.hupx_arak` `unavailable` lesz, és minden lekérdezésnél három hiba kerül a
+naplóba:
+
+```
+REST request to https://api.energy-charts.info/price?bzn=HU returned status 404
+REST result could not be parsed as JSON
+Template variable error: 'value_json' is undefined
+```
+
+Ezért a csomag `resource_template`-tel **tegnaptól holnapig** kér adatot:
+
+```
+https://api.energy-charts.info/price?bzn=HU&start={{ (now() - timedelta(days=1)).strftime('%Y-%m-%d') }}&end={{ (now() + timedelta(days=1)).strftime('%Y-%m-%d') }}
+```
+
+Így a válasz akkor is `200`, ha a mai nap hiányzik — csak rövidebb tömb jön, és a
+napló tiszta marad. **Az árat ettől nem találjuk ki:** az `eur_mwh` frissesség-
+ellenőrzése (30 perc) továbbra is gondoskodik róla, hogy a tegnapi 23:45-ös ár ne
+szivárogjon át mai árként, tehát a szenzorok helyesen `Nem érhető el` állapotban
+maradnak.
+
+A `resource_template` minden frissítés előtt újrarenderelődik, tehát a dátumok
+maguktól továbblépnek éjfélkor — nem kell újraindítás.
+
+> A dátumos végpont az API-nál **nincs cache-elve** (a rövid alakkal ellentétben), és
+> gyors egymásutánban `429 Too Many Requests`-et ad. A 15 perces `scan_interval`
+> (óránként 4 kérés) bőven a limit alatt van, de ne vidd lejjebb meggondolatlanul.
+> A `value_template` a nem-JSON válaszokat (404, 429, karbantartási HTML) `0`-ként
+> kezeli, hibadobás helyett.
+
+---
+
+## A kiesés utólagos pótlása
+
+Amikor az adatforrás pótolja a hiányzó napot, a szenzorok maguktól helyreállnak — de
+a kiesés ideje **lyukként marad a grafikonon**. Ezt tölti ki a
+[`tools/d_tarifa_backfill.py`](../tools/d_tarifa_backfill.py): visszamenőleg
+kiszámolja a hiányzó órák árát az utólag publikált day-ahead adatból, és beírja a
+Home Assistant hosszú távú statisztikáiba a `recorder/import_statistics` websocket
+paranccsal.
+
+### Mit tud és mit nem
+
+|  | |
+|---|---|
+| ✅ **Statisztikák** (`statistics` tábla, órás átlag/min/max) | Ezt használja a `statistics-graph` kártya és a hosszabb időtávra zoomolt Előzmények nézet. A lyuk ott eltűnik. |
+| ❌ **Nyers állapot-történet** (`states` tábla) | A Home Assistant semmilyen támogatott módon nem engedi visszamenőleg írni, így a rövid időtávú Előzmények nézetben a kiesés `Nem érhető el` sávként megmarad. |
+
+### A) Automatikusan, a Home Assistantból (ajánlott)
+
+A package tartalmaz egy `shell_command`-ot és egy automatizálást, ami elindítja a
+scriptet, amikor az ár-szenzor kiesés után visszatér (`unavailable` → érték, 2 perc
+stabilitás után), plusz **6 óránként** hálóként. A script maga dönti el, mit kell
+pótolni, ezért a fölösleges futás nem kerül semmibe.
+
+Ilyenkor a script a Home Assistant saját konténerében fut, és websocket kliensnek az
+`aiohttp`-t használja a `websockets` helyett — az mindig ott van, **nem kell semmit
+telepíteni**.
+
+Három lépés kell hozzá, különben ez a rész nem csinál semmit:
+
+1. Másold a `tools/d_tarifa_backfill.py` fájlt a `/config/tools/` mappába.
+2. Hozz létre egy hosszú élettartamú tokent (**profil → Biztonság**), és tedd
+   egyetlen sorként a `/config/.d_tarifa_token` fájlba.
+3. Kapcsold be az `input_boolean.d_tarifa_auto_backfill` helpert.
+
+> **Miért fájlból jön a token?** A `shell_command` nem nulla visszatérési érték esetén
+> a **teljes parancsot beleírja a naplóba** — parancssori argumentumként a token
+> kiszivárogna. A `.d_tarifa_token` a `.gitignore`-ban van.
+
+Először érdemes kézzel kipróbálni: **Fejlesztői eszközök → Műveletek →
+`shell_command.d_tarifa_backfill`**, és megnézni a válaszban a `returncode`-ot.
+
+| `returncode` | Jelentés |
+|---|---|
+| `0` | Lefutott (akár úgy is, hogy nem volt pótolnivaló) |
+| `1` | Hiba — az automatizálás figyelmeztetést ír a naplóba |
+| `2` | Az adatforrás még mindig nem ad adatot — nem hiba, csendben várunk |
+
+Ha ténylegesen pótolt valamit, egy naplóbejegyzés készül `D tarifa` néven.
+
+### B) Kézzel, asztali gépről
+
+```bash
+pip install websockets
+```
+
+```bash
+python tools/d_tarifa_backfill.py --dry-run --verbose
+```
+
+Ha jónak tűnik, amit kiírt, futtasd `--dry-run` nélkül:
+
+```bash
+python tools/d_tarifa_backfill.py
+```
+
+| Beállítás | Alapértelmezés |
+|---|---|
+| `HA_URL` környezeti változó vagy `--ha-url` | `http://192.168.1.240:8123` |
+| `HA_TOKEN` környezeti változó, `--token` vagy `--token-file` | `/config/.d_tarifa_token`, ha létezik |
+| `--start` / `--end` | tegnap … ma |
+| `--fx` | naponkénti EKB árfolyam a [frankfurter](https://api.frankfurter.dev) API-ból |
+| `--afd` / `--efd` / `--afa` | a HA helperek aktuális értéke |
+
+A token a HA-ban a profilodnál hozható létre (**Biztonság → Hosszú élettartamú
+hozzáférési tokenek**). **Adminisztrátori jog kell hozzá**, mert az
+`import_statistics` parancs `require_admin`.
+
+> A recorder nem ad szolgáltatást a statisztika írására — csak `purge`,
+> `purge_entities`, `enable`, `disable` és `get_statistics` van. Ezért megy a pótlás
+> a `recorder/import_statistics` **websocket** parancson, és ezért kell hozzá token.
+
+### Biztonságos ismételt futtatás
+
+A script alapból csak azokat az órákat tölti fel, amelyekre **egyáltalán nincs még
+statisztika** — a Home Assistant saját, állapotokból számolt (idővel súlyozott)
+átlagát nem írja felül. Ezt a `--overwrite` kapcsolja ki. Emiatt nyugodtan
+ütemezhető napi egyszeri futásra (Windows Ütemezett feladatok / cron): bármilyen
+kiesés magától beheged, amint a forrás pótolja az adatot.
+
+A még futó (le nem zárt) órát szándékosan kihagyja — azt a Home Assistant maga
+számolja ki a valódi állapotokból.
+
+A `shell_command` 60 másodperc után levágja a folyamatot és megállítja az
+automatizálást, ezért a scriptnek van egy saját, ennél rövidebb időkerete
+(`--budget 45`): inkább álljon le értelmes üzenettel. Az energy-charts dátumos
+végpontjának `429`-eire egyszer, 5 másodperc után újrapróbálkozik, ha belefér.
+
+### A pótolt adat megjelenítése
+
+A hosszú távú statisztika `statistics-graph` kártyán látszik biztosan:
+
+```yaml
+type: statistics-graph
+title: D tarifa bruttó energiadíj
+entities:
+  - sensor.d_tarifa_brutto_energiadij
+stat_types:
+  - mean
+  - min
+  - max
+period: hour
+days_to_show: 7
+```

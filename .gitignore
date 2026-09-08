@@ -1,0 +1,28 @@
+# HA runtime / state
+.HA_VERSION
+.ha_run.lock
+.storage/
+.cache/
+.cloud/
+tts/
+tmp/
+deps/
+zigbee2mqtt/state.json
+zigbee2mqtt/coordinator_backup.json
+# databases & logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+home-assistant.log*
+OZW_Log.txt
+# python cache
+__pycache__/
+*.pyc
+# SECRETS — never commit
+secrets.yaml
+.d_tarifa_token
+*.key
+*.pem
+known_devices.yaml
+ip_bans.yaml
