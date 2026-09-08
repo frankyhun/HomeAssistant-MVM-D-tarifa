@@ -6,7 +6,6 @@ komponens vagy HACS nélkül.
 
 Fájl: [`d_tarifa.yaml`](packages/d_tarifa.yaml)
 
-
 ![screenshot](./screenshot.jpg)
 
 ---
@@ -36,7 +35,7 @@ bruttó         = nettó * áfa szorzó (1.27)
 
 | Adat | Forrás | Frissítés |
 |---|---|---|
-| Negyedórás day-ahead ár (HU zóna, EUR/MWh) | [api.energy-charts.info](https://api.energy-charts.info/price?bzn=HU) (Fraunhofer ISE) | 15 percenként |
+| Negyedórás day-ahead ár (HU zóna, EUR/MWh) | [api.energy-charts.info](https://api.energy-charts.info/) (Fraunhofer ISE) | 15 percenként |
 | EUR/HUF árfolyam | [api.frankfurter.dev](https://api.frankfurter.dev/v1/latest?from=EUR&to=HUF) (EKB referencia-árfolyam) | óránként |
 
 Egyik sem igényel kulcsot vagy regisztrációt.
@@ -56,7 +55,10 @@ Ugyanezt a forráspárost (energy-charts + EKB árfolyam) használja a holadelej
 
 - **Home Assistant 2024.10 vagy újabb.** A trigger blokkokban a modern `trigger:`
   kulcsot használjuk a régi `platform:` helyett, és ez 2024.10-ben jelent meg.
-  Régebbi verzión írd vissza mind a három `trigger:` sort `platform:`-ra.
+  Régebbi verzión mind az **öt** `trigger:` sort `platform:`-ra kell írni (három a
+  `template` blokkban, kettő az automatizálásban), az automatizálásban ezen felül a
+  `triggers:` / `conditions:` / `actions:` kulcsokat egyes számba (`trigger:` /
+  `condition:` / `action:`), a szolgáltatáshívó `action:` sorokat pedig `service:`-re.
 - Kimenő internetkapcsolat a fenti két API felé.
 - Semmilyen HACS komponens vagy egyedi integráció nem szükséges.
 
@@ -84,8 +86,8 @@ homeassistant:
   packages: !include_dir_named packages
 ```
 
-> Ebben a repóban ez **már be van állítva** (`configuration.yaml`, 19. sor), tehát
-> ezt a lépést átugorhatod.
+Ha a `homeassistant:` blokkban már szerepel a `packages:` sor, ezt a lépést
+átugorhatod.
 
 ### 3. lépés — konfiguráció ellenőrzése és újraindítás
 
@@ -134,7 +136,7 @@ A pontos díjtételek a saját MVM-számládon szerepelnek, érdemes onnan átve
 | `sensor.d_tarifa_netto_energiadij` | Az aktuális negyedóra **nettó** ára Ft/kWh. Attribútumok: `hupx_eur_mwh`, `arfolyam`, `negyedora_index`, `szamitva` |
 | `sensor.d_tarifa_brutto_energiadij` | Ugyanez **bruttó** (× áfa szorzó) |
 | `sensor.d_tarifa_mai_atlag_brutto` | A mai nap átlagos bruttó ára. Attribútumok: `minimum`, `maximum`, `legolcsobb_idopont`, `legdragabb_idopont` |
-| `binary_sensor.d_tarifa_olcso` | `on`, ha az aktuális bruttó ár az A1 referenciaár alatt van. Amíg az `input_number.d_a1_referencia` `0` (nincs beállítva), **nem érhető el** — nem `off` |
+| `binary_sensor.d_tarifa_olcso` | `on`, ha az aktuális bruttó ár az A1 referenciaár alatt van. Amíg az `input_number.d_a1_referencia` `0` (nincs beállítva), **nem érhető el** — nem `off`. Attribútumok: `kuszob`, `brutto`, `szamitva` |
 
 ### Nyers adat (REST)
 
@@ -202,12 +204,16 @@ Sorrendben ezeket nézd meg:
    a szenzorokat. A kiesés alatt keletkezett grafikon-lyuk utólag betölthető, lásd
    [A kiesés utólagos pótlása](#a-kiesés-utólagos-pótlása).
 
-### A `binary_sensor.d_tarifa_olcso` mindig `Ki`, pedig olcsó az ár
+### Csak a `binary_sensor.d_tarifa_olcso` nem érhető el
 
-Az `input_number.d_a1_referencia` nincs beállítva, ezért `0`-n áll, és a szenzor a
-`0 Ft/kWh`-hoz hasonlít. **Fejlesztői eszközök → Állapotok**-ban ellenőrizd az
-értékét, és állítsd be (ajánlott: `70.1`). A csomag mostantól ilyenkor `Nem érhető el`
-állapotot mutat a félrevezető `Ki` helyett.
+Az `input_number.d_a1_referencia` nincs beállítva, ezért `0`-n áll. A csomag a `0`
+küszöböt szándékosan „nincs beállítva”-ként kezeli, és a szenzort inkább
+`Nem érhető el` állapotban tartja — korábban ilyenkor a `0 Ft/kWh`-hoz hasonlított,
+tehát félrevezetően **mindig `Ki`** volt, 43 Ft/kWh-nál is.
+
+**Fejlesztői eszközök → Állapotok**-ban ellenőrizd az értékét, és állítsd be
+(ajánlott: `70.1`) — a szenzor azonnal életre kel. A `kuszob` attribútum mutatja,
+mivel hasonlít éppen össze.
 
 ### Csak a `sensor.d_tarifa_mai_atlag_brutto` nem érhető el
 
@@ -233,8 +239,13 @@ referencia-árfolyamot használja. Az eltérés tizedszázalékos nagyságrendű
 számlaellenőrzést szeretnél:
 
 1. írd be kézzel az MNB árfolyamot az `input_number.d_arfolyam_kezi` mezőbe,
-2. a `d_tarifa.yaml`-ban az `fx` változóban kommenteld ki a `sensor.eur_huf_arfolyam`
-   ágát.
+2. a `d_tarifa.yaml`-ban írd át az `fx` változót úgy, hogy csak a kézi helpert
+   olvassa. Az `fx` egyetlen `if`/`else` kifejezés, tehát nem egy sort kell
+   kikommentelni, hanem az egészet lecserélni erre:
+
+```yaml
+fx: "{{ states('input_number.d_arfolyam_kezi') | float(395) }}"
+```
 
 ### Az „olcsó” küszöb hangolása
 
@@ -296,7 +307,7 @@ maguktól továbblépnek éjfélkor — nem kell újraindítás.
 
 Amikor az adatforrás pótolja a hiányzó napot, a szenzorok maguktól helyreállnak — de
 a kiesés ideje **lyukként marad a grafikonon**. Ezt tölti ki a
-[`tools/d_tarifa_backfill.py`](../tools/d_tarifa_backfill.py): visszamenőleg
+[`tools/d_tarifa_backfill.py`](tools/d_tarifa_backfill.py): visszamenőleg
 kiszámolja a hiányzó órák árát az utólag publikált day-ahead adatból, és beírja a
 Home Assistant hosszú távú statisztikáiba a `recorder/import_statistics` websocket
 paranccsal.
@@ -307,8 +318,6 @@ paranccsal.
 |---|---|
 | ✅ **Statisztikák** (`statistics` tábla, órás átlag/min/max) | Ezt használja a `statistics-graph` kártya és a hosszabb időtávra zoomolt Előzmények nézet. A lyuk ott eltűnik. |
 | ❌ **Nyers állapot-történet** (`states` tábla) | A Home Assistant semmilyen támogatott módon nem engedi visszamenőleg írni, így a rövid időtávú Előzmények nézetben a kiesés `Nem érhető el` sávként megmarad. |
-
-### A) Automatikusan, a Home Assistantból (ajánlott)
 
 A package tartalmaz egy `shell_command`-ot és egy automatizálást, ami elindítja a
 scriptet, amikor az ár-szenzor kiesés után visszatér (`unavailable` → érték, 2 perc
@@ -322,8 +331,11 @@ telepíteni**.
 Három lépés kell hozzá, különben ez a rész nem csinál semmit:
 
 1. Másold a `tools/d_tarifa_backfill.py` fájlt a `/config/tools/` mappába.
-2. Hozz létre egy hosszú élettartamú tokent (**profil → Biztonság**), és tedd
-   egyetlen sorként a `/config/.d_tarifa_token` fájlba.
+2. Hozz létre egy hosszú élettartamú tokent (**profil → Biztonság → Hosszú
+   élettartamú hozzáférési tokenek**), és tedd egyetlen sorként a
+   `/config/.d_tarifa_token` fájlba. **Adminisztrátori jogú felhasználóé kell
+   legyen**, mert a `recorder/import_statistics` websocket parancs `require_admin` —
+   egy sima felhasználó tokenjével a bejelentkezés még sikerül, csak az írás bukik el.
 3. Kapcsold be az `input_boolean.d_tarifa_auto_backfill` helpert.
 
 > **Miért fájlból jön a token?** A `shell_command` nem nulla visszatérési érték esetén
@@ -341,69 +353,12 @@ Először érdemes kézzel kipróbálni: **Fejlesztői eszközök → Műveletek
 
 Ha ténylegesen pótolt valamit, egy naplóbejegyzés készül `D tarifa` néven.
 
-### B) Kézzel, asztali gépről
-
-```bash
-pip install websockets
-```
-
-> **Először állítsd be a Home Assistant címét.** A script alapértelmezése
-> `http://homeassistant.local:8123` — ez csak **helykitöltő**, a HA dokumentált
-> alapértelmezett hosztneve. Ha a te példányod más címen vagy porton figyel
-> (jellemzően egy fix LAN IP, például `http://192.168.1.50:8123`, vagy HTTPS
-> mögött egy domain), akkor **át kell írnod**, különben a script nem éri el a
-> HA-t. A HA-ban a **Beállítások → Rendszer → Hálózat** alatt látod a címet, de
-> a böngésző címsorából is kimásolhatod — a `/lovelace/...` rész nélkül.
-
-Add meg környezeti változóban:
-
-```bash
-set HA_URL=http://192.168.1.50:8123
-```
-
-vagy közvetlenül a parancsban, a `--ha-url` kapcsolóval:
-
-```bash
-python tools/d_tarifa_backfill.py --ha-url http://192.168.1.50:8123 --dry-run --verbose
-```
-
-Ha önaláírt tanúsítványú HTTPS mögött van, tedd mellé a `--insecure` kapcsolót.
-
-Előbb mindig `--dry-run`-nal érdemes:
-
-```bash
-python tools/d_tarifa_backfill.py --dry-run --verbose
-```
-
-Ha jónak tűnik, amit kiírt, futtasd `--dry-run` nélkül:
-
-```bash
-python tools/d_tarifa_backfill.py
-```
-
-| Beállítás | Alapértelmezés |
-|---|---|
-| `HA_URL` környezeti változó vagy `--ha-url` | `http://homeassistant.local:8123` — **helykitöltő, át kell írni a saját címedre** |
-| `HA_TOKEN` környezeti változó, `--token` vagy `--token-file` | `/config/.d_tarifa_token`, ha létezik |
-| `--start` / `--end` | tegnap … ma |
-| `--fx` | naponkénti EKB árfolyam a [frankfurter](https://api.frankfurter.dev) API-ból |
-| `--afd` / `--efd` / `--afa` | a HA helperek aktuális értéke |
-
-A token a HA-ban a profilodnál hozható létre (**Biztonság → Hosszú élettartamú
-hozzáférési tokenek**). **Adminisztrátori jog kell hozzá**, mert az
-`import_statistics` parancs `require_admin`.
-
-> A recorder nem ad szolgáltatást a statisztika írására — csak `purge`,
-> `purge_entities`, `enable`, `disable` és `get_statistics` van. Ezért megy a pótlás
-> a `recorder/import_statistics` **websocket** parancson, és ezért kell hozzá token.
-
 ### Biztonságos ismételt futtatás
 
 A script alapból csak azokat az órákat tölti fel, amelyekre **egyáltalán nincs még
 statisztika** — a Home Assistant saját, állapotokból számolt (idővel súlyozott)
-átlagát nem írja felül. Ezt a `--overwrite` kapcsolja ki. Emiatt nyugodtan
-ütemezhető napi egyszeri futásra (Windows Ütemezett feladatok / cron): bármilyen
-kiesés magától beheged, amint a forrás pótolja az adatot.
+átlagát nem írja felül. Ezt a `--overwrite` kapcsolja ki. Emiatt fut nyugodtan
+6 óránként is: bármilyen kiesés magától beheged, amint a forrás pótolja az adatot.
 
 A még futó (le nem zárt) órát szándékosan kihagyja — azt a Home Assistant maga
 számolja ki a valódi állapotokból.
@@ -411,7 +366,8 @@ számolja ki a valódi állapotokból.
 A `shell_command` 60 másodperc után levágja a folyamatot és megállítja az
 automatizálást, ezért a scriptnek van egy saját, ennél rövidebb időkerete
 (`--budget 45`): inkább álljon le értelmes üzenettel. Az energy-charts dátumos
-végpontjának `429`-eire egyszer, 5 másodperc után újrapróbálkozik, ha belefér.
+végpontjának `429`-eire legfeljebb kétszer, 5-5 másodperc szünettel újrapróbálkozik
+— de csak akkor, ha az újrapróbálkozás belefér a hátralévő időkeretbe.
 
 ### A pótolt adat megjelenítése
 
