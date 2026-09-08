@@ -33,8 +33,13 @@ FUTTATAS KEZZEL (asztali gepen)
 ===============================
     pip install websockets
 
-    set HA_URL=http://192.168.1.240:8123
+    set HA_URL=http://homeassistant.local:8123
     set HA_TOKEN=<hosszu elettartamu hozzaferesi token>
+
+A `homeassistant.local` csak PELDA - a HA alapertelmezett hosztneve. Ha a te
+peldanyod mas cimen vagy porton figyel (pl. `http://192.168.1.50:8123`, vagy
+HTTPS mogott), akkor ird at: `HA_URL` kornyezeti valtozo vagy `--ha-url`.
+Onalairt tanusitvany eseten kell melle a `--insecure` is.
 
     python tools/d_tarifa_backfill.py --dry-run --verbose
     python tools/d_tarifa_backfill.py
@@ -86,6 +91,11 @@ NETTO_ID = "sensor.d_tarifa_netto_energiadij"
 BRUTTO_ID = "sensor.d_tarifa_brutto_energiadij"
 UNIT = "Ft/kWh"
 
+# Csak alapertelmezes: a HA dokumentalt alapertelmezett hosztneve. Sok
+# telepitesnel mas a cim - allitsd at a HA_URL kornyezeti valtozoval vagy a
+# --ha-url kapcsoloval. (A HA sajat kontenerebol futtatva a package
+# shell_command-ja ugyis http://127.0.0.1:8123-at ad at.)
+DEFAULT_HA_URL = "http://homeassistant.local:8123"
 DEFAULT_TOKEN_FILE = "/config/.d_tarifa_token"
 
 HELPERS = {
@@ -617,7 +627,10 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--ha-url", default=os.environ.get("HA_URL", "http://192.168.1.240:8123")
+        "--ha-url",
+        default=os.environ.get("HA_URL", DEFAULT_HA_URL),
+        help=f"a Home Assistant cime (vagy HA_URL); alapbol {DEFAULT_HA_URL} - "
+        "ha a te peldanyod mashol figyel, ezt at kell allitani",
     )
     parser.add_argument(
         "--token", default=None, help="HA hosszu elettartamu token (vagy HA_TOKEN)"

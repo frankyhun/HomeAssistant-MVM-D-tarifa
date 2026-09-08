@@ -347,6 +347,30 @@ Ha ténylegesen pótolt valamit, egy naplóbejegyzés készül `D tarifa` néven
 pip install websockets
 ```
 
+> **Először állítsd be a Home Assistant címét.** A script alapértelmezése
+> `http://homeassistant.local:8123` — ez csak **helykitöltő**, a HA dokumentált
+> alapértelmezett hosztneve. Ha a te példányod más címen vagy porton figyel
+> (jellemzően egy fix LAN IP, például `http://192.168.1.50:8123`, vagy HTTPS
+> mögött egy domain), akkor **át kell írnod**, különben a script nem éri el a
+> HA-t. A HA-ban a **Beállítások → Rendszer → Hálózat** alatt látod a címet, de
+> a böngésző címsorából is kimásolhatod — a `/lovelace/...` rész nélkül.
+
+Add meg környezeti változóban:
+
+```bash
+set HA_URL=http://192.168.1.50:8123
+```
+
+vagy közvetlenül a parancsban, a `--ha-url` kapcsolóval:
+
+```bash
+python tools/d_tarifa_backfill.py --ha-url http://192.168.1.50:8123 --dry-run --verbose
+```
+
+Ha önaláírt tanúsítványú HTTPS mögött van, tedd mellé a `--insecure` kapcsolót.
+
+Előbb mindig `--dry-run`-nal érdemes:
+
 ```bash
 python tools/d_tarifa_backfill.py --dry-run --verbose
 ```
@@ -359,7 +383,7 @@ python tools/d_tarifa_backfill.py
 
 | Beállítás | Alapértelmezés |
 |---|---|
-| `HA_URL` környezeti változó vagy `--ha-url` | `http://192.168.1.240:8123` |
+| `HA_URL` környezeti változó vagy `--ha-url` | `http://homeassistant.local:8123` — **helykitöltő, át kell írni a saját címedre** |
 | `HA_TOKEN` környezeti változó, `--token` vagy `--token-file` | `/config/.d_tarifa_token`, ha létezik |
 | `--start` / `--end` | tegnap … ma |
 | `--fx` | naponkénti EKB árfolyam a [frankfurter](https://api.frankfurter.dev) API-ból |
