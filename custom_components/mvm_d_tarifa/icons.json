@@ -1,0 +1,24 @@
+{
+  "entity": {
+    "sensor": {
+      "netto_energiadij": { "default": "mdi:flash" },
+      "brutto_energiadij": { "default": "mdi:cash-multiple" },
+      "mai_atlag_brutto": { "default": "mdi:chart-bell-curve" },
+      "hupx_arak": { "default": "mdi:chart-line" },
+      "eur_huf_arfolyam": { "default": "mdi:currency-eur" }
+    },
+    "binary_sensor": {
+      "olcso": { "default": "mdi:piggy-bank" }
+    },
+    "number": {
+      "atviteli_forgalmi_dij": { "default": "mdi:cash" },
+      "elosztoi_forgalmi_dij": { "default": "mdi:transmission-tower" },
+      "afa_szorzo": { "default": "mdi:percent" },
+      "arfolyam_kezi": { "default": "mdi:currency-eur" },
+      "a1_referencia": { "default": "mdi:scale-balance" }
+    }
+  },
+  "services": {
+    "backfill": { "service": "mdi:database-refresh" }
+  }
+}

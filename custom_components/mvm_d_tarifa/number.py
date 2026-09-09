@@ -42,7 +42,6 @@ NUMBERS: tuple[DTarifaNumberDescription, ...] = (
     DTarifaNumberDescription(
         key=CONF_TRANSMISSION_FEE,
         translation_key=CONF_TRANSMISSION_FEE,
-        icon="mdi:cash",
         native_min_value=0.01,
         native_max_value=100,
         native_step=0.01,
@@ -53,7 +52,6 @@ NUMBERS: tuple[DTarifaNumberDescription, ...] = (
     DTarifaNumberDescription(
         key=CONF_DISTRIBUTION_FEE,
         translation_key=CONF_DISTRIBUTION_FEE,
-        icon="mdi:transmission-tower",
         native_min_value=0.01,
         native_max_value=100,
         native_step=0.01,
@@ -64,7 +62,6 @@ NUMBERS: tuple[DTarifaNumberDescription, ...] = (
     DTarifaNumberDescription(
         key=CONF_VAT_MULTIPLIER,
         translation_key=CONF_VAT_MULTIPLIER,
-        icon="mdi:percent",
         native_min_value=1,
         native_max_value=2,
         native_step=0.01,
@@ -74,7 +71,6 @@ NUMBERS: tuple[DTarifaNumberDescription, ...] = (
     DTarifaNumberDescription(
         key=CONF_MANUAL_FX,
         translation_key=CONF_MANUAL_FX,
-        icon="mdi:currency-eur",
         native_min_value=200,
         native_max_value=800,
         native_step=0.01,
@@ -85,7 +81,6 @@ NUMBERS: tuple[DTarifaNumberDescription, ...] = (
     DTarifaNumberDescription(
         key=CONF_A1_REFERENCE,
         translation_key=CONF_A1_REFERENCE,
-        icon="mdi:scale-balance",
         native_min_value=0,
         native_max_value=500,
         native_step=0.1,

@@ -24,7 +24,7 @@ class DTarifaEntity(CoordinatorEntity[DTarifaCoordinator]):
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name="MVM D tarifa",
-            manufacturer="MVM Next",
+            manufacturer="Franky",
             model="D (dinamikus) árszabás",
             entry_type=DeviceEntryType.SERVICE,
             configuration_url="https://api.energy-charts.info/price?bzn=HU",

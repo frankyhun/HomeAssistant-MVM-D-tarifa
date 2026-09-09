@@ -268,11 +268,26 @@ zoomolt Előzményekben a lyuk így eltűnik.
 
 ### Automatikusan
 
-A **Automatikus statisztika-pótlás** kapcsoló alapból be van kapcsolva (a
-telepítő űrlapon és a **Beállítás** gomb alatt is látszik). Ilyenkor az
-integráció magától pótol, amikor kiesés után visszatér az adat, és hathatóránként
-ellenőrzi, maradt-e lyuk — így a Home Assistant leállása alatt keletkezett hiány
-is betöltődik.
+Az **Automatikus statisztika-pótlás** kapcsoló alapból be van kapcsolva (a
+telepítő űrlapon és a **Beállítás** gomb alatt is látszik). Ilyenkor az integráció
+magától pótol:
+
+- **induláskor azonnal**, ha van érvényes ár a mai napra — így a Home Assistant
+  leállása alatt keletkezett lyuk rögtön betöltődik,
+- amikor **kiesés után visszatér** az adat,
+- és **hatóránként** hálóként.
+
+Minden futás a naplóba kerül (`Beállítások → Rendszer → Naplók`, keresés:
+`mvm_d_tarifa`) — az is, ha nem volt mit tenni:
+
+```
+Statisztika-pótlás (indulás): 2 adatpont beírva, 0 kihagyva (már volt
+statisztika), 1 óra számolva, 2026-09-08 .. 2026-09-09
+Statisztika-pótlás (kézi indítás): nem volt mit beírni, a 24 számolt óra
+statisztikája már megvolt (2026-09-08 .. 2026-09-09)
+Statisztika-pótlás (indulás): az energy-charts nem ad árat a
+2026-09-08 .. 2026-09-09 tartományra, nincs mit pótolni
+```
 
 ### Kézzel
 
@@ -297,6 +312,18 @@ a saját napjának EKB árfolyamával számol.
 
 A pótláshoz a `recorder` integráció kell (alapból be van kapcsolva). Ha nincs, az
 integráció ettől még működik, csak a szolgáltatás jelez hibát.
+
+---
+
+## Ikon
+
+Az integráció ikonja a [`brands/`](brands) mappában van (`icon.png` 256×256,
+`icon@2x.png` 512×512). A Home Assistant és a HACS a
+[home-assistant/brands](https://github.com/home-assistant/brands) tárolóból tölti
+be az integrációk ikonjait, ezért ahhoz, hogy a felületen is látszódjon, ezeket a
+fájlokat oda kell beküldeni a `custom_integrations/mvm_d_tarifa/` útvonalra. Amíg
+ez nem történik meg, a HA az általános kirakós-ikont mutatja — ez nem hiba, és a
+működést nem érinti.
 
 ---
 

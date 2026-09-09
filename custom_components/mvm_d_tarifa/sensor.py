@@ -59,7 +59,6 @@ class _PriceSensorBase(DTarifaEntity, SensorEntity):
 class NetPriceSensor(_PriceSensorBase):
     """Az aktuális negyedóra nettó energiadíja."""
 
-    _attr_icon = "mdi:flash"
 
     def __init__(self, coordinator: DTarifaCoordinator) -> None:
         """Szenzor létrehozása."""
@@ -92,7 +91,6 @@ class NetPriceSensor(_PriceSensorBase):
 class GrossPriceSensor(_PriceSensorBase):
     """Az aktuális negyedóra bruttó energiadíja."""
 
-    _attr_icon = "mdi:cash-multiple"
 
     def __init__(self, coordinator: DTarifaCoordinator) -> None:
         """Szenzor létrehozása."""
@@ -117,7 +115,6 @@ class DailyAverageSensor(DTarifaEntity, SensorEntity):
 
     _attr_native_unit_of_measurement = CURRENCY_PER_KWH
     _attr_suggested_display_precision = 2
-    _attr_icon = "mdi:chart-bell-curve"
 
     def __init__(self, coordinator: DTarifaCoordinator) -> None:
         """Szenzor létrehozása."""
@@ -167,7 +164,6 @@ class HupxRawSensor(DTarifaEntity, SensorEntity):
     """A nyers ár-válasz: hány negyedóra van publikálva."""
 
     _attr_native_unit_of_measurement = "db"
-    _attr_icon = "mdi:chart-line"
     # A két hosszú tömb nem kerül az adatbázisba; a license_info igen, mert azt
     # a CC BY 4.0 forrásmegjelölés miatt meg kell őrizni.
     _unrecorded_attributes = frozenset({"unix_seconds", "price"})
@@ -201,7 +197,6 @@ class ExchangeRateSensor(DTarifaEntity, SensorEntity):
 
     _attr_native_unit_of_measurement = CURRENCY_HUF
     _attr_suggested_display_precision = 2
-    _attr_icon = "mdi:currency-eur"
 
     def __init__(self, coordinator: DTarifaCoordinator) -> None:
         """Szenzor létrehozása."""

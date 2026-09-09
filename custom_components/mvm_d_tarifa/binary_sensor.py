@@ -27,7 +27,6 @@ async def async_setup_entry(
 class CheapPriceBinarySensor(DTarifaEntity, BinarySensorEntity):
     """`on`, ha az aktuális bruttó ár az A1 referenciaár alatt van."""
 
-    _attr_icon = "mdi:piggy-bank"
 
     def __init__(self, coordinator: DTarifaCoordinator) -> None:
         """Bináris szenzor létrehozása."""

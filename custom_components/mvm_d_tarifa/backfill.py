@@ -154,8 +154,13 @@ async def async_backfill(
     start_day: date,
     end_day: date,
     overwrite: bool = False,
+    reason: str = "kézi indítás",
 ) -> BackfillResult:
-    """A megadott napok hiányzó óráinak pótlása. Visszaadja, mi történt."""
+    """A megadott napok hiányzó óráinak pótlása. Visszaadja, mi történt.
+
+    Minden kimenetet naplóz: azt is, ha nem volt mit tenni, és azt is, ha
+    írtunk — így a naplóból utólag látszik, mikor mi történt.
+    """
     coordinator = entry.runtime_data
     result = BackfillResult()
 
@@ -164,8 +169,12 @@ async def async_backfill(
         start_day, end_day + timedelta(days=1)
     )
     if not quarters:
-        _LOGGER.debug(
-            "Nincs publikált ár erre a tartományra: %s .. %s", start_day, end_day
+        _LOGGER.info(
+            "Statisztika-pótlás (%s): az energy-charts nem ad árat a %s .. %s "
+            "tartományra, nincs mit pótolni",
+            reason,
+            start_day,
+            end_day,
         )
         return result
 
@@ -177,12 +186,20 @@ async def async_backfill(
     current_hour = now.replace(minute=0, second=0, microsecond=0).timestamp()
     hours = {hour: values for hour, values in hours.items() if hour < current_hour}
     if not hours:
+        _LOGGER.info(
+            "Statisztika-pótlás (%s): nincs lezárt óra a %s .. %s tartományban",
+            reason,
+            start_day,
+            end_day,
+        )
         return result
     result.hours = len(hours)
 
     entities = _entity_ids(hass, entry)
     if len(entities) != 2:
-        _LOGGER.warning("Nincs meg mindkét ár-szenzor, a pótlás kimarad")
+        _LOGGER.warning(
+            "Statisztika-pótlás (%s): nincs meg mindkét ár-szenzor, kimarad", reason
+        )
         return result
 
     tariff = tariff_from_options(entry.options)
@@ -214,6 +231,26 @@ async def async_backfill(
 
         async_import_statistics(hass, _metadata(statistic_id), rows)
         result.imported += len(rows)
-        _LOGGER.info("%s: %d óra statisztikája pótolva", statistic_id, len(rows))
+        _LOGGER.debug("%s: %d óra statisztikája beírva", statistic_id, len(rows))
 
+    if result.imported:
+        _LOGGER.info(
+            "Statisztika-pótlás (%s): %d adatpont beírva, %d kihagyva (már volt "
+            "statisztika), %d óra számolva, %s .. %s",
+            reason,
+            result.imported,
+            result.skipped,
+            result.hours,
+            start_day,
+            end_day,
+        )
+    else:
+        _LOGGER.info(
+            "Statisztika-pótlás (%s): nem volt mit beírni, a %d számolt óra "
+            "statisztikája már megvolt (%s .. %s)",
+            reason,
+            result.hours,
+            start_day,
+            end_day,
+        )
     return result

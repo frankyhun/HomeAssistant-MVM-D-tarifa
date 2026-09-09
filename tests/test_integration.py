@@ -131,20 +131,13 @@ async def test_fee_change_recalculates(
     assert states["olcso"] == "off"  # 90.0 > 70.1
 
 
-async def test_backfill_service(
-    recorder_mock,
-    hass: HomeAssistant,
-    enable_custom_integrations,
-    aioclient_mock,
-    price_payload,
-):
-    """A backfill szolgáltatás órás statisztikát ír a hiányzó órákra."""
-    # A dátumos lekérdezést ELŐBB kell regisztrálni: a mock az első olyan
-    # bejegyzést használja, amelynek a query paraméterei megvannak a kérésben,
-    # és a `bzn=HU` önmagában a dátumos kérésre is illeszkedne.
-    hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(
-        hours=2
-    )
+def _mock_backfill_apis(aioclient_mock, price_payload, hour):
+    """A pótlás dátumos ár-lekérdezése és napi árfolyama.
+
+    ELŐBB kell regisztrálni, mint az általános ár-URL-t: a mock az első olyan
+    bejegyzést használja, amelynek a query paraméterei megvannak a kérésben, és
+    a `bzn=HU` önmagában a dátumos kérésre is illeszkedne.
+    """
     yesterday = dt_util.now().date() - timedelta(days=1)
     aioclient_mock.get(
         f"{PRICE_URL}&start={yesterday}&end={yesterday + timedelta(days=2)}",
@@ -165,29 +158,45 @@ async def test_backfill_service(
     aioclient_mock.get(PRICE_URL, json=price_payload)
     aioclient_mock.get(FX_URL, json={"rates": {"HUF": 400.0}})
 
+
+async def _setup_entry(hass, user_input=None):
+    """Bejegyzés létrehozása a folyamaton keresztül."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
     )
-    await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
-    await hass.async_block_till_done()
-
-    response = await hass.services.async_call(
-        DOMAIN, "backfill", {}, blocking=True, return_response=True
+    await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input or USER_INPUT
     )
     await hass.async_block_till_done()
-    await async_wait_recording_done(hass)
+    return hass.config_entries.async_entries(DOMAIN)[0]
 
-    # Négy negyedóra egy órában: átlag 56 EUR/MWh -> nettó 56 * 0.4 + 23.4 = 45.8
-    assert response == {"beirt_orak": 2, "kihagyott_orak": 0, "szamolt_orak": 1}
 
-    entry = hass.config_entries.async_entries(DOMAIN)[0]
+def _statistic_id(hass, entry, suffix):
     registry = er.async_get(hass)
-    netto_id = next(
+    return next(
         entity.entity_id
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if entity.unique_id.endswith("_netto_energiadij")
+        if entity.unique_id.endswith(suffix)
     )
 
+
+async def test_backfill_runs_on_startup(
+    recorder_mock,
+    hass: HomeAssistant,
+    enable_custom_integrations,
+    aioclient_mock,
+    price_payload,
+):
+    """Induláskor magától pótol, ha van adat a mai napra."""
+    hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(
+        hours=2
+    )
+    _mock_backfill_apis(aioclient_mock, price_payload, hour)
+
+    entry = await _setup_entry(hass)
+    await async_wait_recording_done(hass)
+
+    netto_id = _statistic_id(hass, entry, "_netto_energiadij")
     stats = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
         hass,
@@ -198,55 +207,39 @@ async def test_backfill_service(
         None,
         {"mean", "min", "max"},
     )
+    # Négy negyedóra egy órában: átlag 56 EUR/MWh -> nettó 56 * 0.4 + 23.4 = 45.8
     rows = stats[netto_id]
     assert len(rows) == 1
     assert rows[0]["mean"] == 45.8
     assert rows[0]["min"] == 43.4  # 50 * 0.4 + 23.4
     assert rows[0]["max"] == 48.2  # 62 * 0.4 + 23.4
 
+    # A kézi hívás ezek után már nem ír felül semmit.
+    again = await hass.services.async_call(
+        DOMAIN, "backfill", {}, blocking=True, return_response=True
+    )
+    assert again == {"beirt_orak": 0, "kihagyott_orak": 2, "szamolt_orak": 1}
 
-async def test_backfill_skips_existing_hours(
+
+async def test_backfill_service_writes_when_auto_is_off(
     recorder_mock,
     hass: HomeAssistant,
     enable_custom_integrations,
     aioclient_mock,
     price_payload,
 ):
-    """Másodszorra már nincs mit beírni: a meglévő órákat nem írjuk felül."""
+    """Kikapcsolt automatikus pótlás mellett a szolgáltatás írja be az órákat."""
     hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(
         hours=2
     )
-    yesterday = dt_util.now().date() - timedelta(days=1)
-    aioclient_mock.get(
-        f"{PRICE_URL}&start={yesterday}&end={yesterday + timedelta(days=2)}",
-        json={
-            "unix_seconds": [
-                (hour + timedelta(minutes=15 * i)).timestamp() for i in range(4)
-            ],
-            "price": [50.0, 54.0, 58.0, 62.0],
-            "unit": "EUR / MWh",
-            "license_info": "CC BY 4.0",
-        },
-    )
-    aioclient_mock.get(
-        f"https://api.frankfurter.dev/v1/{dt_util.as_local(hour).date()}"
-        "?from=EUR&to=HUF",
-        json={"rates": {"HUF": 400.0}},
-    )
-    aioclient_mock.get(PRICE_URL, json=price_payload)
-    aioclient_mock.get(FX_URL, json={"rates": {"HUF": 400.0}})
+    _mock_backfill_apis(aioclient_mock, price_payload, hour)
 
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": "user"}
-    )
-    await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
-    await hass.async_block_till_done()
+    await _setup_entry(hass, {**USER_INPUT, "automatikus_potlas": False})
 
-    await hass.services.async_call(DOMAIN, "backfill", {}, blocking=True)
+    response = await hass.services.async_call(
+        DOMAIN, "backfill", {}, blocking=True, return_response=True
+    )
     await hass.async_block_till_done()
     await async_wait_recording_done(hass)
 
-    again = await hass.services.async_call(
-        DOMAIN, "backfill", {}, blocking=True, return_response=True
-    )
-    assert again == {"beirt_orak": 0, "kihagyott_orak": 2, "szamolt_orak": 1}
+    assert response == {"beirt_orak": 2, "kihagyott_orak": 0, "szamolt_orak": 1}

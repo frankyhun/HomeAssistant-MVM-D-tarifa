@@ -107,7 +107,12 @@ def _async_register_service(hass: HomeAssistant) -> None:
             raise vol.Invalid("Az `end` nem lehet korábbi, mint a `start`.")
 
         result = await async_backfill(
-            hass, entries[0], start_day, end_day, call.data["overwrite"]
+            hass,
+            entries[0],
+            start_day,
+            end_day,
+            call.data["overwrite"],
+            reason="kézi indítás",
         )
         return result.as_dict()
 
@@ -131,24 +136,35 @@ def _async_setup_auto_backfill(hass: HomeAssistant, entry: DTarifaConfigEntry) -
     had_price = _has_current_price(coordinator)
 
     async def _run(reason: str) -> None:
+        """Automatikus pótlás. Minden kimenetet naplóz, kivételt nem enged ki."""
         if not entry.options.get(CONF_AUTO_BACKFILL, DEFAULT_AUTO_BACKFILL):
+            _LOGGER.debug(
+                "Statisztika-pótlás (%s) kihagyva: az automatikus pótlás ki van "
+                "kapcsolva",
+                reason,
+            )
             return
         if "recorder" not in hass.config.components:
+            _LOGGER.warning(
+                "Statisztika-pótlás (%s) kihagyva: a recorder integráció nincs "
+                "betöltve",
+                reason,
+            )
             return
         if running.locked():
+            _LOGGER.debug(
+                "Statisztika-pótlás (%s) kihagyva: már fut egy pótlás", reason
+            )
             return
         async with running:
             today = dt_util.now().date()
             try:
-                result = await async_backfill(
-                    hass, entry, today - timedelta(days=1), today
+                await async_backfill(
+                    hass, entry, today - timedelta(days=1), today, reason=reason
                 )
             except Exception:  # noqa: BLE001 - a háttérfutás ne dőljön be
-                _LOGGER.exception("Az automatikus statisztika-pótlás hibára futott")
-                return
-            if result.imported:
-                _LOGGER.info(
-                    "Automatikus pótlás (%s): %d óra beírva", reason, result.imported
+                _LOGGER.exception(
+                    "Statisztika-pótlás (%s) hibára futott", reason
                 )
 
     @callback
@@ -161,6 +177,16 @@ def _async_setup_auto_backfill(hass: HomeAssistant, entry: DTarifaConfigEntry) -
                 hass, _run("adat visszatért"), f"{DOMAIN}_backfill"
             )
         had_price = has_price
+
+    # Induláskor azonnal: ha már van érvényes ár a mai napra, a HA leállása
+    # alatt keletkezett lyukat rögtön betöltjük.
+    if _has_current_price(coordinator):
+        entry.async_create_background_task(hass, _run("indulás"), f"{DOMAIN}_backfill")
+    else:
+        _LOGGER.debug(
+            "Statisztika-pótlás (indulás) kihagyva: nincs érvényes ár a mai napra, "
+            "az adat visszatérésekor újrapróbáljuk"
+        )
 
     entry.async_on_unload(coordinator.async_add_listener(_on_coordinator_update))
     entry.async_on_unload(
