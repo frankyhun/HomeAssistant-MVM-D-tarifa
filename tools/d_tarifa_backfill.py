@@ -3,7 +3,7 @@
 
 MIERT KELL EZ
 =============
-A `packages/d_tarifa.yaml` szandekosan `unavailable` allapotba teszi az
+Az `mvm_d_tarifa` integracio szandekosan `unavailable` allapotba teszi az
 ar-szenzorokat, ha az energy-charts API-bol hianyzik az aktualis negyedora ara
 (pl. 2026-09-08-an a HU zonara egesz ejjel nem volt publikalt adat). Ez helyes:
 inkabb ne mutasson semmit, mint rossz arat. Viszont amikor az adat kesobb
@@ -31,22 +31,30 @@ amelyekre meg egyaltalan nincs statisztika - a HA sajat, allapotokbol szamolt
 
 FUTTATAS
 ========
-A script a Home Assistant sajat kontenerebol fut, a `packages/d_tarifa.yaml`
-`shell_command.d_tarifa_backfill` bejegyzesen keresztul. Az ottani
-automatizalas inditja, amikor az ar-szenzor `unavailable`-bol visszater, plusz
-6 orankent halokent; kezzel a Fejlesztoi eszkozok -> Muveletek alatt hivhato.
+A script a Home Assistant sajat kontenerebol fut. Kezzel a kontener
+shelljebol hivhato, vagy sajat `shell_command` bejegyzesbol - pl. a
+`configuration.yaml`-ban:
 
-Ez az EGYETLEN tamogatott futtatasi mod, es ebbol kovetkezik nehany dolog:
+    shell_command:
+      d_tarifa_backfill: >-
+        python3 /config/tools/d_tarifa_backfill.py
+        --ha-url http://127.0.0.1:8123
+        --token-file /config/.d_tarifa_token --quiet
+
+Ehhez erdemes egy automatizalast is felvenni, ami akkor inditja, amikor a
+`sensor.mvm_d_tarifa_netto_energiadij` `unavailable`-bol visszater.
+
+A HA kontenerebol futtatasbol kovetkezik nehany dolog:
 
   * A HA sajat cime mindig a loopback: `http://127.0.0.1:8123` - ezt a
-    shell_command explicit at is adja a `--ha-url` kapcsoloval. Nincs szukseg
-    `HA_URL` kornyezeti valtozora, sem kulso hosztnevre vagy LAN IP-re.
+    fenti shell_command explicit at is adja a `--ha-url` kapcsoloval. Nincs
+    szukseg `HA_URL` kornyezeti valtozora, sem kulso hosztnevre vagy LAN IP-re.
   * Websocket kliensnek az `aiohttp` megy, ami a HA-ban mindig ott van - nem
     kell semmit telepiteni.
   * A loopbacken nincs TLS, ezert onalairt tanusitvanyt kezelo kapcsolo sincs.
 
-Ha nem az alapertelmezett 8123-as porton figyel a HA, a `shell_command` sorat
-kell atirni a `packages/d_tarifa.yaml`-ban.
+Ha nem az alapertelmezett 8123-as porton figyel a HA, a `--ha-url` erteket
+kell atirni.
 
 A token NEM mehet a parancssorba: a `shell_command` nem nulla visszateresi
 ertek eseten a teljes parancsot beleirja a naploba. Ezert `--token-file`:
@@ -82,8 +90,8 @@ from datetime import date, datetime, timedelta, timezone
 PRICE_URL = "https://api.energy-charts.info/price?bzn=HU&start={start}&end={end}"
 FX_URL = "https://api.frankfurter.dev/v1/{day}?from=EUR&to=HUF"
 
-NETTO_ID = "sensor.d_tarifa_netto_energiadij"
-BRUTTO_ID = "sensor.d_tarifa_brutto_energiadij"
+NETTO_ID = "sensor.mvm_d_tarifa_netto_energiadij"
+BRUTTO_ID = "sensor.mvm_d_tarifa_brutto_energiadij"
 UNIT = "Ft/kWh"
 
 # A script a HA sajat kontenereben fut, tehat a HA mindig a loopbacken van. A
@@ -92,11 +100,13 @@ UNIT = "Ft/kWh"
 DEFAULT_HA_URL = "http://127.0.0.1:8123"
 DEFAULT_TOKEN_FILE = "/config/.d_tarifa_token"
 
+# A dijtetelek az `mvm_d_tarifa` integracio `number` entitasai. Ha atnevezted
+# oket, a --afd / --efd / --afa / --fx kapcsolokkal is megadhatod az erteket.
 HELPERS = {
-    "afd": "input_number.d_atviteli_forgalmi_dij",
-    "efd": "input_number.d_elosztoi_forgalmi_dij",
-    "afa": "input_number.d_afa_kulcs",
-    "fx_kezi": "input_number.d_arfolyam_kezi",
+    "afd": "number.mvm_d_tarifa_atviteli_forgalmi_dij",
+    "efd": "number.mvm_d_tarifa_elosztoi_forgalmi_dij",
+    "afa": "number.mvm_d_tarifa_afa_szorzo",
+    "fx_kezi": "number.mvm_d_tarifa_eur_huf_kezi_tartalek",
 }
 
 
@@ -271,7 +281,7 @@ def read_token(args: argparse.Namespace) -> str:
     """Token: --token > --token-file > HA_TOKEN > /config/.d_tarifa_token.
 
     Az explicit kapcsolok elozik meg a kornyezeti valtozot, nem forditva: a
-    package shell_command-ja `--token-file`-t ad at, es azt nem irhatja felul egy
+    shell_command `--token-file`-t ad at, es azt nem irhatja felul egy
     ambiens `HA_TOKEN` - kulonben egy oda nem illo (pl. mas integraciotol
     maradt) env valtozotol csendben mas tokennel probalnank belepni.
     """
@@ -497,12 +507,13 @@ async def run(args: argparse.Namespace) -> int:
     fx_override = args.fx
     if fx_override is None and args.use_manual_fx:
         fx_override = params["fx_kezi"]
-    # Ugyanaz a hatar, mint a package `beallitva` valtozojaban: a kezi arfolyam
-    # helper `min` erteke 200, ami ervenyes szam, csak nyilvanvaloan rossz.
+    # A kezi arfolyam entitas `min` erteke 200: ervenyes szam, csak
+    # nyilvanvaloan rossz, ezert kulon hatart huzunk.
     if fx_override is not None and fx_override <= 250:
         raise Fail(
             f"Az EUR/HUF arfolyam gyanusan alacsony: {fx_override}. Allitsd be az "
-            "input_number.d_arfolyam_kezi erteket, vagy add meg a --fx kapcsoloval."
+            "number.mvm_d_tarifa_eur_huf_kezi_tartalek erteket, vagy add meg a "
+            "--fx kapcsoloval."
         )
 
     quarters = fetch_prices(start_day, end_day, deadline)
@@ -589,8 +600,7 @@ def main() -> int:
     parser.add_argument(
         "--ha-url",
         default=DEFAULT_HA_URL,
-        help=f"a Home Assistant cime a kontenerbol nezve (alapbol {DEFAULT_HA_URL}); "
-        "nem alapertelmezett port eseten a package shell_command-jaban kell atirni",
+        help=f"a Home Assistant cime a kontenerbol nezve (alapbol {DEFAULT_HA_URL})",
     )
     parser.add_argument(
         "--token", default=None, help="HA hosszu elettartamu token (vagy HA_TOKEN)"
@@ -625,7 +635,7 @@ def main() -> int:
     parser.add_argument(
         "--use-manual-fx",
         action="store_true",
-        help="az input_number.d_arfolyam_kezi erteket hasznalja arfolyamkent",
+        help="a kezi tartalek arfolyam entitas erteket hasznalja arfolyamkent",
     )
     parser.add_argument("--afd", type=float, default=None, help="atviteli forgalmi dij")
     parser.add_argument("--efd", type=float, default=None, help="elosztoi forgalmi dij")

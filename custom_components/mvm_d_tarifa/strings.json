@@ -1,0 +1,78 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Take the fees from your own MVM invoice. The defaults are indicative only.",
+        "data": {
+          "atviteli_forgalmi_dij": "Transmission fee (net)",
+          "elosztoi_forgalmi_dij": "Distribution fee (net)",
+          "afa_szorzo": "VAT multiplier",
+          "arfolyam_kezi": "EUR/HUF (manual fallback)",
+          "a1_referencia": "Fixed gross price above the A1 band"
+        },
+        "data_description": {
+          "arfolyam_kezi": "Only used when the ECB rate is unavailable. You can enter the MNB mid rate here.",
+          "a1_referencia": "The binary sensor compares the current gross price against this."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "The integration is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Edit fees",
+        "data": {
+          "atviteli_forgalmi_dij": "Transmission fee (net)",
+          "elosztoi_forgalmi_dij": "Distribution fee (net)",
+          "afa_szorzo": "VAT multiplier",
+          "arfolyam_kezi": "EUR/HUF (manual fallback)",
+          "a1_referencia": "Fixed gross price above the A1 band"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "netto_energiadij": {
+        "name": "Net energy price"
+      },
+      "brutto_energiadij": {
+        "name": "Gross energy price"
+      },
+      "mai_atlag_brutto": {
+        "name": "Today's gross average"
+      },
+      "hupx_arak": {
+        "name": "HUPX prices"
+      },
+      "eur_huf_arfolyam": {
+        "name": "EUR/HUF rate"
+      }
+    },
+    "binary_sensor": {
+      "olcso": {
+        "name": "Cheap"
+      }
+    },
+    "number": {
+      "atviteli_forgalmi_dij": {
+        "name": "Transmission fee"
+      },
+      "elosztoi_forgalmi_dij": {
+        "name": "Distribution fee"
+      },
+      "afa_szorzo": {
+        "name": "VAT multiplier"
+      },
+      "arfolyam_kezi": {
+        "name": "EUR/HUF manual fallback"
+      },
+      "a1_referencia": {
+        "name": "A1 reference price"
+      }
+    }
+  }
+}

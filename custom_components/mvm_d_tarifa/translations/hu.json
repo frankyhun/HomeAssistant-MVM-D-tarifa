@@ -1,0 +1,78 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "A díjtételeket a saját MVM-számládról vedd át. Az alapértelmezett értékek csak tájékoztató jellegűek.",
+        "data": {
+          "atviteli_forgalmi_dij": "Átviteli forgalmi díj (nettó)",
+          "elosztoi_forgalmi_dij": "Elosztói forgalmi díj (nettó)",
+          "afa_szorzo": "ÁFA szorzó",
+          "arfolyam_kezi": "EUR/HUF (kézi tartalék)",
+          "a1_referencia": "A1 sávhatár feletti bruttó ár"
+        },
+        "data_description": {
+          "arfolyam_kezi": "Csak akkor használjuk, ha az EKB árfolyam nem érhető el. Ide írhatod be az MNB középárfolyamot is.",
+          "a1_referencia": "Ehhez hasonlítja a bináris szenzor az aktuális bruttó árat."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Az integráció már be van állítva."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Díjtételek módosítása",
+        "data": {
+          "atviteli_forgalmi_dij": "Átviteli forgalmi díj (nettó)",
+          "elosztoi_forgalmi_dij": "Elosztói forgalmi díj (nettó)",
+          "afa_szorzo": "ÁFA szorzó",
+          "arfolyam_kezi": "EUR/HUF (kézi tartalék)",
+          "a1_referencia": "A1 sávhatár feletti bruttó ár"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "netto_energiadij": {
+        "name": "Nettó energiadíj"
+      },
+      "brutto_energiadij": {
+        "name": "Bruttó energiadíj"
+      },
+      "mai_atlag_brutto": {
+        "name": "Mai átlag bruttó"
+      },
+      "hupx_arak": {
+        "name": "HUPX árak"
+      },
+      "eur_huf_arfolyam": {
+        "name": "EUR/HUF árfolyam"
+      }
+    },
+    "binary_sensor": {
+      "olcso": {
+        "name": "Olcsó"
+      }
+    },
+    "number": {
+      "atviteli_forgalmi_dij": {
+        "name": "Átviteli forgalmi díj"
+      },
+      "elosztoi_forgalmi_dij": {
+        "name": "Elosztói forgalmi díj"
+      },
+      "afa_szorzo": {
+        "name": "ÁFA szorzó"
+      },
+      "arfolyam_kezi": {
+        "name": "EUR/HUF kézi tartalék"
+      },
+      "a1_referencia": {
+        "name": "A1 referenciaár"
+      }
+    }
+  }
+}
