@@ -315,14 +315,27 @@ integráció ettől még működik, csak a szolgáltatás jelez hibát.
 
 ---
 
-## Ikon
+## Ikon és embléma
 
-Az integráció ikonja a [`brands/`](brands) mappában van (`icon.png` 256×256,
-`icon@2x.png` 512×512). A Home Assistant és a HACS a
-[home-assistant/brands](https://github.com/home-assistant/brands) tárolóból tölti
-be az integrációk ikonjait, ezért ahhoz, hogy a felületen is látszódjon, ezeket a
-fájlokat oda kell beküldeni a `custom_integrations/mvm_d_tarifa/` útvonalra. Amíg
-ez nem történik meg, a HA az általános kirakós-ikont mutatja — ez nem hiba, és a
+Az integráció a saját brand képeit szolgálja ki a
+[`custom_components/mvm_d_tarifa/brand/`](custom_components/mvm_d_tarifa/brand)
+mappából — a Home Assistant a `/api/brands/integration/...` végponton keresi
+őket, és csak akkor fordul a [brands](https://github.com/home-assistant/brands)
+CDN-hez, ha az integráció nem hoz sajátot. Így nem kell semmit külön beküldeni.
+
+| Fájl | Méret | Hol látszik |
+|---|---|---|
+| `icon.png`, `icon@2x.png` | 256², 512² | integráció-lista, eszköz-kártya |
+| `logo.png`, `logo@2x.png` | 454×128, 907×256 | integráció fejléce világos témán |
+| `dark_logo.png`, `dark_logo@2x.png` | 454×128, 907×256 | ugyanaz sötét témán |
+
+A képeket a `brand/` mappában elég lecserélni; a Home Assistant a következő
+indításnál már az újat adja. (Sötét témás ikonból nincs külön változat: a
+színátmenetes háttér mindkét témán megáll, a HA pedig ilyenkor magától az
+`icon.png`-t használja.)
+
+**Home Assistant 2026.3 vagy újabb kell hozzá** — régebbi verzión a brand képek
+még csak a CDN-ről jöttek, ott az általános kirakós-ikon látszik. Ez nem hiba, a
 működést nem érinti.
 
 ---
