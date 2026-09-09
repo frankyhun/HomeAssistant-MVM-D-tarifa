@@ -1,13 +1,13 @@
 {
   "domain": "mvm_d_tarifa",
   "name": "MVM D (dinamikus) tarifa",
+  "after_dependencies": [
+    "recorder"
+  ],
   "codeowners": [
     "@frankyhun"
   ],
   "config_flow": true,
-  "after_dependencies": [
-    "recorder"
-  ],
   "documentation": "https://github.com/frankyhun/HomeAssistant-MVM-D-tarifa",
   "integration_type": "service",
   "iot_class": "cloud_polling",
