@@ -40,15 +40,18 @@ TITLE = "MVM D tarifa"
 def _number(
     minimum: float, maximum: float, step: float, unit: str | None = None
 ) -> NumberSelector:
-    return NumberSelector(
-        NumberSelectorConfig(
-            min=minimum,
-            max=maximum,
-            step=step,
-            unit_of_measurement=unit,
-            mode=NumberSelectorMode.BOX,
-        )
+    """Szám-mező. Mértékegység nélkül a kulcsot ki KELL hagyni: a selector
+    sémája `str`-t vár, `None`-tól `vol.Invalid`-ot dob, amit a HA HTTP rétege
+    néma 400 Bad Request-té alakít — az űrlap meg sem jelenik."""
+    config = NumberSelectorConfig(
+        min=minimum,
+        max=maximum,
+        step=step,
+        mode=NumberSelectorMode.BOX,
     )
+    if unit is not None:
+        config["unit_of_measurement"] = unit
+    return NumberSelector(config)
 
 
 def _schema(defaults: dict[str, Any]) -> vol.Schema:

@@ -293,6 +293,15 @@ fel, amelyekre még nincs statisztika, ezért nyugodtan futhat ismételten.
 
 ## Új verzió kiadása (karbantartóknak)
 
+Tesztek futtatása a tároló gyökeréből:
+
+```bash
+pip install pytest-homeassistant-custom-component && pytest
+```
+
+A `tests/` a teljes folyamatot végigjátssza egy valódi Home Assistant
+példányon: űrlap → bejegyzés → entitások → díjtétel-módosítás.
+
 A HACS a GitHub-kiadásokból (release) veszi a verziót. Új verzió közreadása:
 
 1. `custom_components/mvm_d_tarifa/manifest.json` → `version` mező emelése
