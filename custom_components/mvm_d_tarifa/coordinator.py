@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import logging
 from typing import Any
 
@@ -18,8 +18,10 @@ from homeassistant.util import dt as dt_util
 
 from .const import (
     DOMAIN,
+    FX_DAY_URL,
     FX_TTL,
     FX_URL,
+    PRICE_RANGE_URL,
     PRICE_TTL,
     PRICE_URL,
     REQUEST_TIMEOUT,
@@ -64,6 +66,7 @@ class DTarifaCoordinator(DataUpdateCoordinator[DTarifaData]):
         self._fx: float | None = None
         self._fx_ts: float = 0.0
         self._fx_updated: datetime | None = None
+        self._fx_by_day: dict[date, float] = {}
 
     async def _async_update_data(self) -> DTarifaData:
         now = dt_util.utcnow().timestamp()
@@ -142,6 +145,41 @@ class DTarifaCoordinator(DataUpdateCoordinator[DTarifaData]):
             payload.get("unit"),
             payload.get("license_info"),
         )
+
+    async def async_fetch_price_range(
+        self, start: date, end: date
+    ) -> list[tuple[int, float]]:
+        """(unix_seconds, EUR/MWh) párok egy időszakra, a null árak nélkül.
+
+        A statisztika-pótlás használja. Az `end` napja is beleesik, ezért a
+        hívó egy nappal túlnyúlva kér. 404 esetén a tartományra egyszerűen
+        nincs publikált ár — üres listát adunk vissza.
+        """
+        try:
+            payload = await self._get_json(
+                PRICE_RANGE_URL.format(start=start.isoformat(), end=end.isoformat())
+            )
+        except aiohttp.ClientResponseError as err:
+            if err.status == 404:
+                return []
+            raise
+        times = payload.get("unix_seconds") or []
+        prices = payload.get("price") or []
+        return [
+            (int(time), float(price))
+            for time, price in zip(times, prices, strict=False)
+            if price is not None
+        ]
+
+    async def async_fetch_fx_for_day(self, day: date) -> float:
+        """Az adott napon érvényes EKB EUR/HUF árfolyam, gyorsítótárazva."""
+        if day not in self._fx_by_day:
+            payload = await self._get_json(FX_DAY_URL.format(day=day.isoformat()))
+            rate = payload.get("rates", {}).get("HUF")
+            if not isinstance(rate, (int, float)) or rate <= 0:
+                raise ValueError(f"nincs EUR/HUF árfolyam erre a napra: {day}")
+            self._fx_by_day[day] = float(rate)
+        return self._fx_by_day[day]
 
     async def _fetch_fx(self) -> float:
         """EKB EUR/HUF referencia-árfolyam."""

@@ -8,11 +8,13 @@
           "elosztoi_forgalmi_dij": "Distribution fee (net)",
           "afa_szorzo": "VAT multiplier",
           "arfolyam_kezi": "EUR/HUF (manual fallback)",
-          "a1_referencia": "Fixed gross price above the A1 band"
+          "a1_referencia": "Fixed gross price above the A1 band",
+          "automatikus_potlas": "Automatic statistics backfill"
         },
         "data_description": {
           "arfolyam_kezi": "Only used when the ECB rate is unavailable. You can enter the MNB mid rate here.",
-          "a1_referencia": "The binary sensor compares the current gross price against this."
+          "a1_referencia": "The binary sensor compares the current gross price against this.",
+          "automatikus_potlas": "Fill missing hours automatically once the data comes back."
         }
       }
     },
@@ -29,7 +31,11 @@
           "elosztoi_forgalmi_dij": "Distribution fee (net)",
           "afa_szorzo": "VAT multiplier",
           "arfolyam_kezi": "EUR/HUF (manual fallback)",
-          "a1_referencia": "Fixed gross price above the A1 band"
+          "a1_referencia": "Fixed gross price above the A1 band",
+          "automatikus_potlas": "Automatic statistics backfill"
+        },
+        "data_description": {
+          "automatikus_potlas": "Fill missing hours automatically once the data comes back."
         }
       }
     }
@@ -72,6 +78,26 @@
       },
       "a1_referencia": {
         "name": "A1 reference price"
+      }
+    }
+  },
+  "services": {
+    "backfill": {
+      "name": "Backfill statistics",
+      "description": "Recomputes the price of missing hours from the day-ahead data published later and writes it into the long-term statistics. It only fills statistics, not the raw state history.",
+      "fields": {
+        "start": {
+          "name": "Start day",
+          "description": "First day to backfill. Defaults to yesterday."
+        },
+        "end": {
+          "name": "End day",
+          "description": "Last day to backfill. Defaults to today."
+        },
+        "overwrite": {
+          "name": "Overwrite",
+          "description": "Also overwrite hours that already have statistics. By default only missing hours are filled."
+        }
       }
     }
   }

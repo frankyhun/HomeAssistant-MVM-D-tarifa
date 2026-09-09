@@ -1,0 +1,14 @@
+backfill:
+  fields:
+    start:
+      example: "2026-09-08"
+      selector:
+        date:
+    end:
+      example: "2026-09-09"
+      selector:
+        date:
+    overwrite:
+      default: false
+      selector:
+        boolean:

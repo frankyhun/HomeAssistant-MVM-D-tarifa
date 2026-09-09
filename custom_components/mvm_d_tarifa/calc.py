@@ -10,9 +10,23 @@ Képlet (MVM Next hivatalos árképzés):
 from __future__ import annotations
 
 from bisect import bisect_left, bisect_right
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
-from .const import STALE_SECONDS
+from .const import (
+    CONF_A1_REFERENCE,
+    CONF_DISTRIBUTION_FEE,
+    CONF_MANUAL_FX,
+    CONF_TRANSMISSION_FEE,
+    CONF_VAT_MULTIPLIER,
+    DEFAULT_A1_REFERENCE,
+    DEFAULT_DISTRIBUTION_FEE,
+    DEFAULT_MANUAL_FX,
+    DEFAULT_TRANSMISSION_FEE,
+    DEFAULT_VAT_MULTIPLIER,
+    STALE_SECONDS,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +46,21 @@ class Tariff:
     def gross(self, eur_mwh: float, fx: float) -> float:
         """Bruttó energiadíj Ft/kWh-ban."""
         return self.net(eur_mwh, fx) * self.vat_multiplier
+
+
+def tariff_from_options(options: Mapping[str, Any]) -> Tariff:
+    """A bejegyzés beállításaiban tárolt díjtételek."""
+    return Tariff(
+        transmission_fee=float(
+            options.get(CONF_TRANSMISSION_FEE, DEFAULT_TRANSMISSION_FEE)
+        ),
+        distribution_fee=float(
+            options.get(CONF_DISTRIBUTION_FEE, DEFAULT_DISTRIBUTION_FEE)
+        ),
+        vat_multiplier=float(options.get(CONF_VAT_MULTIPLIER, DEFAULT_VAT_MULTIPLIER)),
+        manual_fx=float(options.get(CONF_MANUAL_FX, DEFAULT_MANUAL_FX)),
+        a1_reference=float(options.get(CONF_A1_REFERENCE, DEFAULT_A1_REFERENCE)),
+    )
 
 
 def current_index(times: list[float], now_ts: float) -> int:

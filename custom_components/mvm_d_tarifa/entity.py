@@ -5,20 +5,8 @@ from __future__ import annotations
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .calc import Tariff
-from .const import (
-    CONF_A1_REFERENCE,
-    CONF_DISTRIBUTION_FEE,
-    CONF_MANUAL_FX,
-    CONF_TRANSMISSION_FEE,
-    CONF_VAT_MULTIPLIER,
-    DEFAULT_A1_REFERENCE,
-    DEFAULT_DISTRIBUTION_FEE,
-    DEFAULT_MANUAL_FX,
-    DEFAULT_TRANSMISSION_FEE,
-    DEFAULT_VAT_MULTIPLIER,
-    DOMAIN,
-)
+from .calc import Tariff, tariff_from_options
+from .const import DOMAIN
 from .coordinator import DTarifaCoordinator
 
 
@@ -45,20 +33,7 @@ class DTarifaEntity(CoordinatorEntity[DTarifaCoordinator]):
     @property
     def tariff(self) -> Tariff:
         """A bejegyzésben tárolt díjtételek."""
-        options = self.coordinator.config_entry.options
-        return Tariff(
-            transmission_fee=float(
-                options.get(CONF_TRANSMISSION_FEE, DEFAULT_TRANSMISSION_FEE)
-            ),
-            distribution_fee=float(
-                options.get(CONF_DISTRIBUTION_FEE, DEFAULT_DISTRIBUTION_FEE)
-            ),
-            vat_multiplier=float(
-                options.get(CONF_VAT_MULTIPLIER, DEFAULT_VAT_MULTIPLIER)
-            ),
-            manual_fx=float(options.get(CONF_MANUAL_FX, DEFAULT_MANUAL_FX)),
-            a1_reference=float(options.get(CONF_A1_REFERENCE, DEFAULT_A1_REFERENCE)),
-        )
+        return tariff_from_options(self.coordinator.config_entry.options)
 
     @property
     def fx(self) -> float:

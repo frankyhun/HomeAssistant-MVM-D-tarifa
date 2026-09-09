@@ -8,11 +8,13 @@
           "elosztoi_forgalmi_dij": "Elosztói forgalmi díj (nettó)",
           "afa_szorzo": "ÁFA szorzó",
           "arfolyam_kezi": "EUR/HUF (kézi tartalék)",
-          "a1_referencia": "A1 sávhatár feletti bruttó ár"
+          "a1_referencia": "A1 sávhatár feletti bruttó ár",
+          "automatikus_potlas": "Automatikus statisztika-pótlás"
         },
         "data_description": {
           "arfolyam_kezi": "Csak akkor használjuk, ha az EKB árfolyam nem érhető el. Ide írhatod be az MNB középárfolyamot is.",
-          "a1_referencia": "Ehhez hasonlítja a bináris szenzor az aktuális bruttó árat."
+          "a1_referencia": "Ehhez hasonlítja a bináris szenzor az aktuális bruttó árat.",
+          "automatikus_potlas": "Kiesés után magától pótolja a hiányzó órákat a grafikonon."
         }
       }
     },
@@ -29,7 +31,11 @@
           "elosztoi_forgalmi_dij": "Elosztói forgalmi díj (nettó)",
           "afa_szorzo": "ÁFA szorzó",
           "arfolyam_kezi": "EUR/HUF (kézi tartalék)",
-          "a1_referencia": "A1 sávhatár feletti bruttó ár"
+          "a1_referencia": "A1 sávhatár feletti bruttó ár",
+          "automatikus_potlas": "Automatikus statisztika-pótlás"
+        },
+        "data_description": {
+          "automatikus_potlas": "Kiesés után magától pótolja a hiányzó órákat a grafikonon."
         }
       }
     }
@@ -72,6 +78,26 @@
       },
       "a1_referencia": {
         "name": "A1 referenciaár"
+      }
+    }
+  },
+  "services": {
+    "backfill": {
+      "name": "Statisztika-pótlás",
+      "description": "Visszamenőleg kiszámolja a hiányzó órák árát az utólag publikált day-ahead adatból, és beírja a hosszú távú statisztikákba. Csak a statisztikát pótolja, a nyers állapot-történetet nem.",
+      "fields": {
+        "start": {
+          "name": "Kezdő nap",
+          "description": "Az első pótolandó nap. Alapértelmezés: tegnap."
+        },
+        "end": {
+          "name": "Záró nap",
+          "description": "Az utolsó pótolandó nap. Alapértelmezés: ma."
+        },
+        "overwrite": {
+          "name": "Felülírás",
+          "description": "A már meglévő órás statisztikákat is felülírja. Alapból csak a hiányzó órák töltődnek fel."
+        }
       }
     }
   }

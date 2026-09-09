@@ -88,6 +88,7 @@ az **MVM D (dinamikus) tarifa** integrációt. Az űrlapon öt értéket kell me
 | ÁFA szorzó | `1.27` |
 | EUR/HUF (kézi tartalék) | `395` Ft |
 | A1 sávhatár feletti bruttó ár | `70.1` Ft/kWh |
+| Automatikus statisztika-pótlás | bekapcsolva |
 
 A pontos díjtételek a saját MVM-számládon szerepelnek, érdemes onnan átvenni őket.
 Az értékek utólag bármikor módosíthatók: vagy az integráció kártyáján a
@@ -253,41 +254,49 @@ helyét ez az integráció vette át. Ha korábban azt használtad, a telepíté
 
 ---
 
-## Opcionális: a kiesés utólagos pótlása
+## A kiesés utólagos pótlása
 
 Ha az adatforrásból hiányzott egy időszak, a szenzorok maguktól helyreállnak, de a
-kiesés **lyukként marad a grafikonon**. A
-[`tools/d_tarifa_backfill.py`](tools/d_tarifa_backfill.py) visszamenőleg kiszámolja
-a hiányzó órák árát az utólag publikált day-ahead adatból, és beírja a hosszú távú
-statisztikákba: a `statistics-graph` kártyán és a hosszabb időtávú Előzményekben a
-lyuk így eltűnik. A nyers állapot-történetet a Home Assistant nem engedi
-visszamenőleg írni, ott a kiesés `Nem érhető el` marad.
+kiesés **lyukként marad a grafikonon**. Az integráció ezt vissza tudja tölteni: az
+utólag publikált day-ahead adatból kiszámolja a hiányzó órák árát, és beírja a
+hosszú távú statisztikákba. A `statistics-graph` kártyán és a hosszabb időtávra
+zoomolt Előzményekben a lyuk így eltűnik.
 
-A script a Home Assistant konténerén belül fut, és az integráció entitásaiból
-(`sensor.mvm_d_tarifa_netto_energiadij`, `number.mvm_d_tarifa_*`) dolgozik:
+> A nyers állapot-történetet (`states` tábla) a Home Assistant nem engedi
+> visszamenőleg írni, ezért a rövid időtávú Előzmények nézetben a kiesés
+> `Nem érhető el` marad. Csak az órás statisztika pótolható.
 
-1. Másold a `tools/d_tarifa_backfill.py` fájlt a `/config/tools/` mappába.
-2. Hozz létre egy hosszú élettartamú tokent (**profil → Biztonság**), és tedd
-   egyetlen sorként a `/config/.d_tarifa_token` fájlba. **Adminisztrátori jogú
-   felhasználóé kell legyen**, mert a `recorder/import_statistics` parancs
-   `require_admin`. (A token azért fájlból jön, mert a `shell_command` hiba esetén
-   a teljes parancsot a naplóba írja — argumentumként kiszivárogna.)
-3. Ha automatikusan is futtatnád, vedd fel a `configuration.yaml`-ba:
+### Automatikusan
 
-   ```yaml
-   shell_command:
-     d_tarifa_backfill: >-
-       python3 /config/tools/d_tarifa_backfill.py
-       --ha-url http://127.0.0.1:8123
-       --token-file /config/.d_tarifa_token --quiet
-   ```
+A **Automatikus statisztika-pótlás** kapcsoló alapból be van kapcsolva (a
+telepítő űrlapon és a **Beállítás** gomb alatt is látszik). Ilyenkor az
+integráció magától pótol, amikor kiesés után visszatér az adat, és hathatóránként
+ellenőrzi, maradt-e lyuk — így a Home Assistant leállása alatt keletkezett hiány
+is betöltődik.
 
-   és indítsd egy automatizálásból, amikor a
-   `sensor.mvm_d_tarifa_netto_energiadij` `unavailable` állapotból visszatér.
+### Kézzel
 
-Kézzel is kipróbálható a konténer shelljéből, illetve a **Fejlesztői eszközök →
-Műveletek** alatt a fenti `shell_command`-dal. A script csak azokat az órákat tölti
-fel, amelyekre még nincs statisztika, ezért nyugodtan futhat ismételten.
+**Fejlesztői eszközök → Műveletek → MVM D (dinamikus) tarifa: Statisztika-pótlás**,
+vagy automatizálásból:
+
+```yaml
+action: mvm_d_tarifa.backfill
+data:
+  start: "2026-09-08"   # opcionális, alapértelmezés: tegnap
+  end: "2026-09-09"     # opcionális, alapértelmezés: ma
+  overwrite: false      # opcionális, alapból csak a hiányzó órák
+response_variable: potlas
+```
+
+A válasz megmondja, mi történt: `beirt_orak`, `kihagyott_orak`, `szamolt_orak`.
+
+A pótlás **idempotens**: alapból csak azokra az órákra ír, amelyekre még nincs
+statisztika — a Home Assistant saját, valós állapotokból számolt átlagát nem írja
+felül. Nyugodtan futtatható ismételten. Az árfolyam napra pontos: minden negyedóra
+a saját napjának EKB árfolyamával számol.
+
+A pótláshoz a `recorder` integráció kell (alapból be van kapcsolva). Ha nincs, az
+integráció ettől még működik, csak a szolgáltatás jelez hibát.
 
 ---
 

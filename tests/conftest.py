@@ -3,7 +3,6 @@
 import pathlib
 import sys
 
-import pytest
 import pytest_socket
 
 # A pytest-homeassistant-custom-component minden teszt előtt letiltja a
@@ -35,9 +34,3 @@ import custom_components  # noqa: E402
 
 if str(_ROOT / "custom_components") not in custom_components.__path__:
     custom_components.__path__.append(str(_ROOT / "custom_components"))
-
-
-@pytest.fixture(autouse=True)
-def _custom_integrations(enable_custom_integrations):
-    """A custom_components mappa betöltése minden tesztben."""
-    return None

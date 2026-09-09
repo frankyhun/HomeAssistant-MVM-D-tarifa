@@ -13,6 +13,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import callback
 from homeassistant.helpers.selector import (
+    BooleanSelector,
     NumberSelector,
     NumberSelectorConfig,
     NumberSelectorMode,
@@ -20,6 +21,7 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     CONF_A1_REFERENCE,
+    CONF_AUTO_BACKFILL,
     CONF_DISTRIBUTION_FEE,
     CONF_MANUAL_FX,
     CONF_TRANSMISSION_FEE,
@@ -27,6 +29,7 @@ from .const import (
     CURRENCY_HUF,
     CURRENCY_PER_KWH,
     DEFAULT_A1_REFERENCE,
+    DEFAULT_AUTO_BACKFILL,
     DEFAULT_DISTRIBUTION_FEE,
     DEFAULT_MANUAL_FX,
     DEFAULT_TRANSMISSION_FEE,
@@ -78,6 +81,10 @@ def _schema(defaults: dict[str, Any]) -> vol.Schema:
                 CONF_A1_REFERENCE,
                 default=defaults.get(CONF_A1_REFERENCE, DEFAULT_A1_REFERENCE),
             ): _number(0, 500, 0.1, CURRENCY_PER_KWH),
+            vol.Required(
+                CONF_AUTO_BACKFILL,
+                default=defaults.get(CONF_AUTO_BACKFILL, DEFAULT_AUTO_BACKFILL),
+            ): BooleanSelector(),
         }
     )
 
