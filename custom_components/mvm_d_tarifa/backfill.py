@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 import logging
 
+from homeassistant.components.logbook import async_log_entry
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import (
     async_import_statistics,
@@ -34,7 +35,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .calc import tariff_from_options
-from .const import CURRENCY_PER_KWH
+from .const import CURRENCY_PER_KWH, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,6 +91,19 @@ def _metadata(statistic_id: str) -> dict:
     else:
         metadata["has_mean"] = True
     return metadata
+
+
+def _async_logbook_entry(hass: HomeAssistant, entity_id: str, message: str) -> None:
+    """Bejegyzés az eszköz Napló paneljére.
+
+    A fájl-napló (`home-assistant.log`) és a logbook két külön dolog: az
+    eszköz-oldali Napló csak entitás-eseményeket mutat, ezért a pótlás
+    eredményét külön be kell írni oda. Az ár-szenzorhoz kötjük, így az
+    eszköz-kártyán is látszik.
+    """
+    if "logbook" not in hass.config.components:
+        return
+    async_log_entry(hass, "MVM D tarifa", message, DOMAIN, entity_id)
 
 
 def _entity_ids(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, str]:
@@ -234,6 +248,13 @@ async def async_backfill(
         _LOGGER.debug("%s: %d óra statisztikája beírva", statistic_id, len(rows))
 
     if result.imported:
+        _async_logbook_entry(
+            hass,
+            entities["netto_energiadij"],
+            f"statisztika-pótlás ({reason}): {result.imported} adatpont beírva, "
+            f"{result.skipped} kihagyva, {result.hours} óra számolva "
+            f"({start_day} .. {end_day})",
+        )
         _LOGGER.info(
             "Statisztika-pótlás (%s): %d adatpont beírva, %d kihagyva (már volt "
             "statisztika), %d óra számolva, %s .. %s",

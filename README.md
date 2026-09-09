@@ -277,8 +277,8 @@ magától pótol:
 - amikor **kiesés után visszatér** az adat,
 - és **hatóránként** hálóként.
 
-Minden futás a naplóba kerül (`Beállítások → Rendszer → Naplók`, keresés:
-`mvm_d_tarifa`) — az is, ha nem volt mit tenni:
+Minden futás a **rendszernaplóba** kerül (`Beállítások → Rendszer → Naplók`,
+keresés: `mvm_d_tarifa`) — az is, ha nem volt mit tenni:
 
 ```
 Statisztika-pótlás (indulás): 2 adatpont beírva, 0 kihagyva (már volt
@@ -288,6 +288,13 @@ statisztikája már megvolt (2026-09-08 .. 2026-09-09)
 Statisztika-pótlás (indulás): az energy-charts nem ad árat a
 2026-09-08 .. 2026-09-09 tartományra, nincs mit pótolni
 ```
+
+Ha ténylegesen írt is adatot, arról az eszköz oldalán a **Napló** panelre is
+kerül egy sor (`MVM D tarifa statisztika-pótlás (indulás): 84 adatpont beírva,
+4 kihagyva, 44 óra számolva`). Az a panel a logbook, nem a fájl-napló: csak
+entitás-eseményeket mutat, és a számszerű szenzorok változásait eleve kiszűri —
+ezért marad amúgy üresen. Üres futásról (amikor nem volt mit beírni) nem
+készül logbook-bejegyzés, hogy ne szemetelje tele.
 
 ### Kézzel
 

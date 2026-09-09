@@ -11,12 +11,14 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from homeassistant.components.logbook import EVENT_LOGBOOK_ENTRY
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import async_capture_events
 from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
@@ -178,6 +180,33 @@ def _statistic_id(hass, entry, suffix):
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.unique_id.endswith(suffix)
     )
+
+
+async def test_backfill_writes_logbook_entry(
+    recorder_mock,
+    hass: HomeAssistant,
+    enable_custom_integrations,
+    aioclient_mock,
+    price_payload,
+):
+    """A pótlás eredménye az eszköz Napló paneljén is megjelenik."""
+    # A logbook teljes betöltése frontendet kívánna; itt elég betöltöttnek
+    # jelölni: az `async_log_entry` csak eseményt küld.
+    hass.config.components.add("logbook")
+    hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(
+        hours=2
+    )
+    _mock_backfill_apis(aioclient_mock, price_payload, hour)
+    entries = async_capture_events(hass, EVENT_LOGBOOK_ENTRY)
+
+    entry = await _setup_entry(hass)
+    await hass.async_block_till_done()
+
+    assert len(entries) == 1
+    logged = entries[0].data
+    assert logged["name"] == "MVM D tarifa"
+    assert logged["entity_id"] == _statistic_id(hass, entry, "_netto_energiadij")
+    assert "2 adatpont beírva" in logged["message"]
 
 
 async def test_backfill_runs_on_startup(
