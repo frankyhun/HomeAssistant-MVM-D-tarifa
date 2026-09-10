@@ -133,6 +133,53 @@ async def test_fee_change_recalculates(
     assert states["olcso"] == "off"  # 90.0 > 70.1
 
 
+async def test_price_request_uses_local_date_after_midnight(
+    hass: HomeAssistant, enable_custom_integrations, aioclient_mock, freezer
+):
+    """Éjfél és 02:00 helyi idő között is a mai helyi napra kérdezünk.
+
+    Az energy-charts a paraméter nélküli lekérésre az UTC szerinti mai napot
+    adja vissza, a naphatárt viszont helyi idő szerint húzza meg: 22:00 UTC
+    után még a tegnapi, helyi éjfélkor véget érő napot küldte, amitől az
+    árszenzorok elévülés miatt `unknown`-ba estek. A dátumot az API helyi idő
+    szerint értelmezi, ezért kifejezetten a helyi mai napot kérjük.
+
+    A mock csak a dátumos URL-re felel: ha a lekérés visszaesne a paraméter
+    nélküli alakra, a teszt illesztési hibával bukna.
+    """
+    await hass.config.async_set_time_zone("Europe/Budapest")
+    # 2026-09-09 22:30 UTC = 2026-09-10 00:30 helyi idő — az UTC és a helyi
+    # dátum ilyenkor eltér.
+    freezer.move_to("2026-09-09 22:30:00+00:00")
+    quarter = dt_util.utcnow()
+    price_url = f"{PRICE_URL}&start=2026-09-10&end=2026-09-11"
+    aioclient_mock.get(
+        price_url,
+        json={
+            "unix_seconds": [
+                (quarter + timedelta(minutes=15 * i)).timestamp() for i in range(4)
+            ],
+            "price": [54.0, 55.0, 56.0, 57.0],
+            "unit": "EUR / MWh",
+            "license_info": "CC BY 4.0",
+        },
+    )
+    aioclient_mock.get(FX_URL, json={"rates": {"HUF": 400.0}})
+
+    entry = await _setup_entry(hass)
+    assert entry.state is ConfigEntryState.LOADED
+
+    assert [
+        str(url)
+        for _, url, _, _ in aioclient_mock.mock_calls
+        if url.host == "api.energy-charts.info"
+    ] == [price_url]
+
+    states = _states_by_key(hass, entry.entry_id)
+    assert states["brutto_energiadij"] == "57.15"
+    assert states["mai_atlag_brutto"] != "unavailable"
+
+
 def _mock_backfill_apis(aioclient_mock, price_payload, hour):
     """A pótlás dátumos ár-lekérdezése és napi árfolyama.
 

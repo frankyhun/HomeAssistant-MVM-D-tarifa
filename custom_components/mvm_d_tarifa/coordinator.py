@@ -23,7 +23,6 @@ from .const import (
     FX_URL,
     PRICE_RANGE_URL,
     PRICE_TTL,
-    PRICE_URL,
     REQUEST_TIMEOUT,
     UPDATE_INTERVAL,
 )
@@ -115,22 +114,27 @@ class DTarifaCoordinator(DataUpdateCoordinator[DTarifaData]):
     async def _fetch_prices(
         self,
     ) -> tuple[list[float], list[float | None], str | None, str | None]:
-        """Negyedórás day-ahead árak a HU zónára, EUR/MWh-ban."""
-        try:
-            payload = await self._get_json(PRICE_URL)
-        except aiohttp.ClientResponseError as err:
-            if err.status != 404:
-                raise
-            # Az API 404-et ad, ha a kért időszakra nincs publikált ár. Az
-            # alapértelmezett időszakot nem dokumentálják, ezért ilyenkor
-            # kifejezetten a mai és a másnapi napra kérdezünk rá. Ha erre is
-            # 404 jön, tényleg nincs adat: a hívó ilyenkor a gyorsítótárat
-            # tartja meg, az entitások pedig az elévülés miatt lesznek
-            # elérhetetlenek — rossz árat nem mutatunk.
-            today = dt_util.now().date()
-            payload = await self._get_json(
-                f"{PRICE_URL}&start={today}&end={today + timedelta(days=2)}"
-            )
+        """Negyedórás day-ahead árak a HU zónára, EUR/MWh-ban.
+
+        Mindig kifejezett dátumtartományt kérünk. A paraméter nélküli lekérés
+        egyetlen napot ad vissza, és a „mai nap” alatt az UTC szerinti mai
+        napot érti, a naphatárt viszont helyi idő szerint húzza meg: éjfél és
+        02:00 (télen 01:00) helyi idő között ezért még a tegnapi napot küldte,
+        ami épp helyi éjfélkor véget ér — az ár így elévültnek látszott, az
+        entitások pedig `unknown` állapotba kerültek.
+
+        A dátumot az API helyi (közép-európai) idő szerint értelmezi, tehát a
+        `start=ma` pontosan a helyi éjféltől indul. Az `end` napja is beleesik,
+        így a másnapi árak is megjönnek, amint publikálják őket.
+
+        404 esetén a tartományra nincs publikált ár. Ezt nem kezeljük külön: a
+        hívó a gyorsítótárat tartja meg, az entitások pedig az elévülés miatt
+        lesznek elérhetetlenek — rossz árat nem mutatunk.
+        """
+        today = dt_util.now().date()
+        payload = await self._get_json(
+            PRICE_RANGE_URL.format(start=today, end=today + timedelta(days=1))
+        )
         times = payload.get("unix_seconds")
         prices = payload.get("price")
         if not isinstance(times, list) or not isinstance(prices, list):

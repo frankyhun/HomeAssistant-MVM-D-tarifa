@@ -182,9 +182,13 @@ A hosszú `unix_seconds` és `price` tömböt az integráció kihagyja a rögzí
 
 4. **Az energy-charts 404-et ad a HU zónára.** Ez azt jelenti, hogy a kért
    időszakra nincs publikált ár — előfordul, amíg a mai nap adata meg nem
-   jelenik. Az integráció ilyenkor a mai és a másnapi napra kifejezetten is
-   rákérdez, és ha az sincs meg, inkább elérhetetlen marad. Ellenőrizhető
-   böngészőből: <https://api.energy-charts.info/price?bzn=HU>.
+   jelenik. Az integráció ilyenkor megtartja az utolsó választ, és inkább
+   elérhetetlen marad. Ellenőrizhető böngészőből (a mai és a másnapi napra,
+   ahogy az integráció is kéri):
+   <https://api.energy-charts.info/price?bzn=HU&start=2026-01-01&end=2026-01-02>
+   — a dátumokat írd át. A paraméter nélküli
+   <https://api.energy-charts.info/price?bzn=HU> alak félrevezető: mindig
+   egyetlen napot ad, és éjfél és 02:00 helyi idő között még a tegnapit.
 
 ### Csak a mai átlag nem érhető el
 

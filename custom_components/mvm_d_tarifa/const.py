@@ -10,10 +10,14 @@ DOMAIN: Final = "mvm_d_tarifa"
 # Adatforrások. Egyik sem igényel kulcsot vagy regisztrációt.
 PRICE_URL: Final = "https://api.energy-charts.info/price?bzn=HU"
 FX_URL: Final = "https://api.frankfurter.dev/v1/latest?from=EUR&to=HUF"
-# A statisztika-pótláshoz: adott időszak árai, és az adott napon érvényes
-# árfolyam. A frankfurter a legközelebbi korábbi munkanap árfolyamát adja —
-# pontosan azt, amit az árfolyam-szenzor is mutatott aznap.
+# Adott időszak árai. Ezt kéri a koordinátor is (a mai és a másnapi napra) és
+# a statisztika-pótlás is. Az API a dátumot helyi (közép-európai) idő szerint
+# értelmezi, a paraméter nélküli lekérés viszont az UTC szerinti mai napot adja
+# — lásd a `DTarifaCoordinator._fetch_prices` magyarázatát.
 PRICE_RANGE_URL: Final = PRICE_URL + "&start={start}&end={end}"
+# A statisztika-pótláshoz az adott napon érvényes árfolyam. A frankfurter a
+# legközelebbi korábbi munkanap árfolyamát adja — pontosan azt, amit az
+# árfolyam-szenzor is mutatott aznap.
 FX_DAY_URL: Final = "https://api.frankfurter.dev/v1/{day}?from=EUR&to=HUF"
 
 REQUEST_TIMEOUT: Final = 30
