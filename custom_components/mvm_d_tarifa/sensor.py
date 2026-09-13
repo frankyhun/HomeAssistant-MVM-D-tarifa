@@ -173,6 +173,11 @@ class HupxRawSensor(DTarifaEntity, SensorEntity):
         super().__init__(coordinator, "hupx_arak")
 
     @property
+    def available(self) -> bool:
+        """Még egyszer sem sikerült ár-adatot lekérni: nem érhető el."""
+        return super().available and bool(self.coordinator.data.prices)
+
+    @property
     def native_value(self) -> int | None:
         """96 (csak a mai nap) vagy 192 (a másnapiakkal együtt)."""
         return len(self.coordinator.data.prices) or None

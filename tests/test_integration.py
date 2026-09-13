@@ -184,6 +184,42 @@ async def test_price_request_uses_local_date_after_midnight(
     assert states["mai_atlag_brutto"] != "unavailable"
 
 
+async def test_setup_loads_when_price_api_is_down(
+    hass: HomeAssistant, enable_custom_integrations, aioclient_mock, price_payload
+):
+    """Elérhetetlen ár-API mellett is betölt, és magától helyreáll.
+
+    Korábban az első lekérés 404-e `ConfigEntryNotReady`-t okozott: a
+    platformok nem töltődtek be, a regisztrált entitások pedig „már nem
+    szolgáltatott” jelzést kaptak.
+    """
+    aioclient_mock.get(PRICE_URL, status=404)
+    aioclient_mock.get(FX_URL, json={"rates": {"HUF": 400.0}})
+
+    entry = await _setup_entry(hass)
+    assert entry.state is ConfigEntryState.LOADED
+
+    states = _states_by_key(hass, entry.entry_id)
+    assert len(states) == 11
+    assert states["brutto_energiadij"] == "unavailable"
+    assert states["netto_energiadij"] == "unavailable"
+    assert states["mai_atlag_brutto"] == "unavailable"
+    assert states["hupx_arak"] == "unavailable"
+    assert states["olcso"] == "unavailable"
+    assert states["eur_huf_arfolyam"] == "400.0"
+    assert states["afa_szorzo"] == "1.27"
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(PRICE_URL, json=price_payload)
+    aioclient_mock.get(FX_URL, json={"rates": {"HUF": 400.0}})
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(minutes=1, seconds=1))
+    await hass.async_block_till_done()
+
+    states = _states_by_key(hass, entry.entry_id)
+    assert states["brutto_energiadij"] != "unavailable"
+    assert states["hupx_arak"] == "8"
+
+
 def _mock_backfill_apis(aioclient_mock, price_payload, hour):
     """A pótlás dátumos ár-lekérdezése és napi árfolyama.
 
