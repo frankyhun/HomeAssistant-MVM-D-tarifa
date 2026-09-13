@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 import voluptuous as vol
@@ -188,14 +188,21 @@ def _async_setup_auto_backfill(hass: HomeAssistant, entry: DTarifaConfigEntry) -
             "az adat visszatérésekor újrapróbáljuk"
         )
 
+    @callback
+    def _on_interval(_now: datetime) -> None:
+        """Időzített háló.
+
+        A `@callback` kötelező: nélküle a HA végrehajtó szálon hívja, ahonnan
+        a task létrehozása elhal ("coroutine was never awaited").
+        """
+        entry.async_create_background_task(
+            hass, _run("időzített ellenőrzés"), f"{DOMAIN}_backfill"
+        )
+
     entry.async_on_unload(coordinator.async_add_listener(_on_coordinator_update))
     entry.async_on_unload(
         async_track_time_interval(
-            hass,
-            lambda _now: entry.async_create_background_task(
-                hass, _run("időzített ellenőrzés"), f"{DOMAIN}_backfill"
-            ),
-            timedelta(hours=AUTO_BACKFILL_INTERVAL_HOURS),
+            hass, _on_interval, timedelta(hours=AUTO_BACKFILL_INTERVAL_HOURS)
         )
     )
 
