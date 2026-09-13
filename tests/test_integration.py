@@ -9,6 +9,7 @@ Futtatás a tároló gyökeréből:
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.components.logbook import EVENT_LOGBOOK_ENTRY
@@ -18,7 +19,10 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import async_capture_events
+from pytest_homeassistant_custom_component.common import (
+    async_capture_events,
+    async_fire_time_changed,
+)
 from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
@@ -319,3 +323,36 @@ async def test_backfill_service_writes_when_auto_is_off(
     await async_wait_recording_done(hass)
 
     assert response == {"beirt_orak": 2, "kihagyott_orak": 0, "szamolt_orak": 1}
+
+
+async def test_backfill_runs_on_interval(
+    recorder_mock,
+    hass: HomeAssistant,
+    enable_custom_integrations,
+    aioclient_mock,
+    price_payload,
+):
+    """Az időzített háló az eseményhurokban indítja a pótlást.
+
+    Korábban a `lambda` időzítő végrehajtó szálon futott, a task létrehozása
+    elhalt ("coroutine was never awaited").
+    """
+    hour = dt_util.utcnow().replace(minute=0, second=0, microsecond=0) - timedelta(
+        hours=2
+    )
+    _mock_backfill_apis(aioclient_mock, price_payload, hour)
+
+    with patch(
+        "custom_components.mvm_d_tarifa.async_backfill", new_callable=AsyncMock
+    ) as backfill:
+        await _setup_entry(hass)
+        await hass.async_block_till_done()
+        assert [c.kwargs["reason"] for c in backfill.call_args_list] == ["indulás"]
+
+        async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=6, seconds=1))
+        await hass.async_block_till_done()
+
+    assert [c.kwargs["reason"] for c in backfill.call_args_list] == [
+        "indulás",
+        "időzített ellenőrzés",
+    ]
