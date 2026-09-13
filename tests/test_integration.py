@@ -251,7 +251,9 @@ async def test_backfill_writes_logbook_entry(
     entries = async_capture_events(hass, EVENT_LOGBOOK_ENTRY)
 
     entry = await _setup_entry(hass)
-    await hass.async_block_till_done()
+    # Az induláskori pótlás háttér-task: újabb HA-ban az alap
+    # `async_block_till_done` nem várja ki.
+    await hass.async_block_till_done(wait_background_tasks=True)
 
     assert len(entries) == 1
     logged = entries[0].data
@@ -274,6 +276,7 @@ async def test_backfill_runs_on_startup(
     _mock_backfill_apis(aioclient_mock, price_payload, hour)
 
     entry = await _setup_entry(hass)
+    await hass.async_block_till_done(wait_background_tasks=True)
     await async_wait_recording_done(hass)
 
     netto_id = _statistic_id(hass, entry, "_netto_energiadij")
@@ -346,11 +349,11 @@ async def test_backfill_runs_on_interval(
         "custom_components.mvm_d_tarifa.async_backfill", new_callable=AsyncMock
     ) as backfill:
         await _setup_entry(hass)
-        await hass.async_block_till_done()
+        await hass.async_block_till_done(wait_background_tasks=True)
         assert [c.kwargs["reason"] for c in backfill.call_args_list] == ["indulás"]
 
         async_fire_time_changed(hass, dt_util.utcnow() + timedelta(hours=6, seconds=1))
-        await hass.async_block_till_done()
+        await hass.async_block_till_done(wait_background_tasks=True)
 
     assert [c.kwargs["reason"] for c in backfill.call_args_list] == [
         "indulás",
