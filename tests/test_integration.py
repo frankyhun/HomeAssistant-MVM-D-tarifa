@@ -32,6 +32,7 @@ DOMAIN = "mvm_d_tarifa"
 
 PRICE_URL = "https://api.energy-charts.info/price?bzn=HU"
 FX_URL = "https://api.frankfurter.dev/v1/latest?from=EUR&to=HUF"
+AUTO_BACKFILL_LOOKBACK_DAYS = 7
 
 # 400 Ft/EUR mellett az aktuális negyedóra 54 EUR/MWh ára:
 #   nettó  = 54 * 400 / 1000 + 3.39 + 20.01 = 45.00 Ft/kWh
@@ -227,18 +228,25 @@ def _mock_backfill_apis(aioclient_mock, price_payload, hour):
     bejegyzést használja, amelynek a query paraméterei megvannak a kérésben, és
     a `bzn=HU` önmagában a dátumos kérésre is illeszkedne.
     """
-    yesterday = dt_util.now().date() - timedelta(days=1)
-    aioclient_mock.get(
-        f"{PRICE_URL}&start={yesterday}&end={yesterday + timedelta(days=2)}",
-        json={
-            "unix_seconds": [
-                (hour + timedelta(minutes=15 * i)).timestamp() for i in range(4)
-            ],
-            "price": [50.0, 54.0, 58.0, 62.0],
-            "unit": "EUR / MWh",
-            "license_info": "CC BY 4.0",
-        },
-    )
+    today = dt_util.now().date()
+    payload = {
+        "unix_seconds": [
+            (hour + timedelta(minutes=15 * i)).timestamp() for i in range(4)
+        ],
+        "price": [50.0, 54.0, 58.0, 62.0],
+        "unit": "EUR / MWh",
+        "license_info": "CC BY 4.0",
+    }
+    # Kézi hívás: tegnaptól; automatikus: az elmúlt hét naptól. Mindkettő a
+    # mai napon túl egy nappal ér véget.
+    for start in (
+        today - timedelta(days=1),
+        today - timedelta(days=AUTO_BACKFILL_LOOKBACK_DAYS),
+    ):
+        aioclient_mock.get(
+            f"{PRICE_URL}&start={start}&end={today + timedelta(days=1)}",
+            json=payload,
+        )
     aioclient_mock.get(
         f"https://api.frankfurter.dev/v1/{dt_util.as_local(hour).date()}"
         "?from=EUR&to=HUF",
@@ -395,3 +403,9 @@ async def test_backfill_runs_on_interval(
         "indulás",
         "időzített ellenőrzés",
     ]
+    # Nem csak a tegnapot nézi: a napokkal később publikált ár is bekerül.
+    today = dt_util.now().date()
+    assert backfill.call_args.args[2:4] == (
+        today - timedelta(days=AUTO_BACKFILL_LOOKBACK_DAYS),
+        today,
+    )

@@ -53,6 +53,12 @@ SERVICE_BACKFILL: Final = "backfill"
 # Az automatikus pótlás hálója: ennyi időnként újrapróbáljuk, hogy a HA
 # leállása alatt keletkezett lyukak is betöltődjenek.
 AUTO_BACKFILL_INTERVAL_HOURS: Final = 6
+# Ennyi napra néz vissza az automatikus pótlás. Az energy-charts egy kiesett nap
+# árait napokkal később is pótolhatja; ha csak a tegnapot néznénk, a később
+# megjelenő adat örökre kimaradna. A már meglévő órákat úgyis kihagyjuk, és az
+# ár nélküli negyedórákat sem írjuk be, így a tágabb ablak csak egy nagyobb
+# lekérdezés.
+AUTO_BACKFILL_LOOKBACK_DAYS: Final = 7
 
 CURRENCY_PER_KWH: Final = "Ft/kWh"
 CURRENCY_HUF: Final = "Ft"

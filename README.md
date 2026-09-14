@@ -281,6 +281,11 @@ magától pótol:
 - amikor **kiesés után visszatér** az adat,
 - és **hatóránként** hálóként.
 
+Az automatikus pótlás mindig az **elmúlt 7 napot** nézi át. Előfordul, hogy az
+energy-charts egy teljes napra nem ad árat, és azt csak napokkal később pótolja.
+Amíg nincs ár, ott nincs mit beírni. Amint megjelenik, a következő futás
+visszatölti.
+
 Minden futás a **rendszernaplóba** kerül (`Beállítások → Rendszer → Naplók`,
 keresés: `mvm_d_tarifa`) — az is, ha nem volt mit tenni:
 

@@ -26,6 +26,7 @@ from .backfill import async_backfill
 from .calc import current_eur_mwh
 from .const import (
     AUTO_BACKFILL_INTERVAL_HOURS,
+    AUTO_BACKFILL_LOOKBACK_DAYS,
     CONF_AUTO_BACKFILL,
     DEFAULT_AUTO_BACKFILL,
     DOMAIN,
@@ -160,7 +161,11 @@ def _async_setup_auto_backfill(hass: HomeAssistant, entry: DTarifaConfigEntry) -
             today = dt_util.now().date()
             try:
                 await async_backfill(
-                    hass, entry, today - timedelta(days=1), today, reason=reason
+                    hass,
+                    entry,
+                    today - timedelta(days=AUTO_BACKFILL_LOOKBACK_DAYS),
+                    today,
+                    reason=reason,
                 )
             except Exception:  # noqa: BLE001 - a háttérfutás ne dőljön be
                 _LOGGER.exception(
